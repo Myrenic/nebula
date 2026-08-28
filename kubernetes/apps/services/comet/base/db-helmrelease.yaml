@@ -1,0 +1,65 @@
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: comet-postgres
+spec:
+  interval: 1h
+  chartRef:
+    kind: OCIRepository
+    name: comet
+  values:
+    controllers:
+      comet-postgres:
+        containers:
+          app:
+            image:
+              repository: postgres
+              tag: 18-alpine
+            env:
+              POSTGRES_USER: "comet"
+              POSTGRES_PASSWORD: "comet"
+              POSTGRES_DB: "comet"
+              TZ: "${TZ}"
+            args:
+              - "postgres"
+              - "-c"
+              - "shared_buffers=128MB"
+              - "-c"
+              - "effective_cache_size=384MB"
+              - "-c"
+              - "maintenance_work_mem=64MB"
+              - "-c"
+              - "checkpoint_completion_target=0.9"
+              - "-c"
+              - "wal_buffers=8MB"
+              - "-c"
+              - "random_page_cost=1.1"
+              - "-c"
+              - "effective_io_concurrency=200"
+              - "-c"
+              - "work_mem=8MB"
+              - "-c"
+              - "max_connections=100"
+            resources:
+              requests:
+                cpu: 100m
+                memory: 256Mi
+              limits:
+                memory: 1Gi
+    defaultPodOptions:
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
+    service:
+      postgres:
+        ports:
+          postgres:
+            port: 5432
+    persistence:
+      data:
+        type: persistentVolumeClaim
+        storageClass: longhorn
+        accessMode: ReadWriteOnce
+        size: 10Gi
+        globalMounts:
+          - path: /var/lib/postgresql

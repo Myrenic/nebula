@@ -1,0 +1,67 @@
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: aiometadata
+spec:
+  interval: 1h
+  chartRef:
+    kind: OCIRepository
+    name: aiometadata
+  values:
+    controllers:
+      aiometadata:
+        containers:
+          app:
+            image:
+              repository: ghcr.io/cedya77/aiometadata
+              tag: latest
+            env:
+              PORT: "3232"
+              HOST_NAME: "https://aiometadata.${SECRET_DOMAIN_0}"
+              LOG_LEVEL: "info"
+              TMDB_API: "${AIOMETADATA_TMDB_API}"
+              TVDB_API_KEY: "${AIOMETADATA_TVDB_API_KEY}"
+              REDIS_URL: "redis://aiometadata-redis:6379"
+              DATABASE_URI: "sqlite://addon/data/db.sqlite"
+              TZ: "${TZ}"
+              ENABLE_CACHE_WARMING: "true"
+              CACHE_WARMUP_MODE: "essential"
+              CACHE_WARMUP_UUID: "system-cache-warmer"
+              CACHE_WARMUP_ON_STARTUP: "true"
+              CATALOG_WARMUP_RESUME_ON_RESTART: "true"
+              CATALOG_WARMUP_MAX_PAGES_PER_CATALOG: "100"
+              TMDB_POPULAR_WARMING_ENABLED: "true"
+              MAL_WARMUP_ENABLED: "true"
+              DISABLE_TRAKT_SEARCH: "false"
+            resources:
+              requests:
+                cpu: 50m
+                memory: 256Mi
+              limits:
+                memory: 1Gi
+            securityContext:
+              runAsNonRoot: true
+              allowPrivilegeEscalation: false
+              capabilities:
+                drop: ["ALL"]
+    defaultPodOptions:
+      securityContext:
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        fsGroupChangePolicy: OnRootMismatch
+        seccompProfile:
+          type: RuntimeDefault
+    service:
+      app:
+        ports:
+          http:
+            port: 3232
+    persistence:
+      data:
+        type: persistentVolumeClaim
+        storageClass: longhorn
+        accessMode: ReadWriteMany
+        size: 10Gi
+        globalMounts:
+          - path: /app/addon/data

@@ -1,0 +1,41 @@
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: knightcrawler-lavinmq
+spec:
+  interval: 1h
+  chartRef:
+    kind: OCIRepository
+    name: knightcrawler
+  values:
+    controllers:
+      knightcrawler-lavinmq:
+        containers:
+          app:
+            image:
+              repository: cloudamqp/lavinmq
+              tag: latest
+            resources:
+              requests:
+                cpu: 50m
+                memory: 128Mi
+              limits:
+                memory: 512Mi
+    defaultPodOptions:
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
+    service:
+      amqp:
+        controller: knightcrawler-lavinmq
+        ports:
+          amqp:
+            port: 5672
+    persistence:
+      data:
+        type: persistentVolumeClaim
+        storageClass: longhorn
+        accessMode: ReadWriteOnce
+        size: 5Gi
+        globalMounts:
+          - path: /var/lib/lavinmq

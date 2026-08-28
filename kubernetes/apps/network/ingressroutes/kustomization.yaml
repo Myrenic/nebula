@@ -2,21 +2,33 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:
+  - ./aiostreams.yaml
+  - ./aiometadata.yaml
+  - ./aiomanager.yaml
+  - ./catch-all.yaml
   - ./certificate.yaml
-  - ./middlewares.yaml
-  - ./oauth2-proxy.yaml
+  - ./comet.yaml
+  - ./coder.yaml
   - ./flux-operator.yaml
+  - ./grafana.yaml
   - ./hermes-agent.yaml
-  - ./longhorn.yaml
   - ./homeassistant.yaml
   - ./homeassistant-k8s.yaml
-  - ./aiostreams.yaml
-  - ./traefik.yaml
-  - ./velero-ui.yaml
-  - ./obsidiansync.yaml
+  - ./knightcrawler.yaml
+  - ./longhorn.yaml
+  - ./mediaflow-proxy.yaml
+  - ./mediafusion.yaml
+  - ./middlewares.yaml
   - ./nexus.yaml
-  - ./coder.yaml
-  - ./grafana.yaml
+  - ./nzbdav.yaml
+  - ./obsidiansync.yaml
+  - ./oauth2-proxy.yaml
+  - ./openposterdb.yaml
+  - ./prowlarr.yaml
+  - ./spottarr.yaml
   - ./stremthru.yaml
+  - ./subtitles.yaml
+  - ./traefik.yaml
+  - ./uptime-kuma.yaml
+  - ./velero-ui.yaml
   - ./zigbee2mqtt.yaml
-  - ./catch-all.yaml

@@ -1,0 +1,50 @@
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: mediafusion-redis
+spec:
+  interval: 1h
+  chartRef:
+    kind: OCIRepository
+    name: mediafusion
+  values:
+    controllers:
+      mediafusion-redis:
+        containers:
+          app:
+            image:
+              repository: redis
+              tag: "7-alpine"
+            command:
+              - "redis-server"
+              - "--appendonly"
+              - "yes"
+              - "--save"
+              - "60"
+              - "1"
+              - "--maxmemory-policy"
+              - "allkeys-lru"
+            resources:
+              requests:
+                cpu: 25m
+                memory: 64Mi
+              limits:
+                memory: 256Mi
+    defaultPodOptions:
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
+    service:
+      redis:
+        controller: mediafusion-redis
+        ports:
+          redis:
+            port: 6379
+    persistence:
+      data:
+        type: persistentVolumeClaim
+        storageClass: longhorn
+        accessMode: ReadWriteOnce
+        size: 5Gi
+        globalMounts:
+          - path: /data

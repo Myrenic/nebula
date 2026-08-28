@@ -1,0 +1,48 @@
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: knightcrawler-migrate
+spec:
+  interval: 1h
+  chartRef:
+    kind: OCIRepository
+    name: knightcrawler
+  values:
+    controllers:
+      migrate:
+        type: job
+        job:
+          backoffLimit: 10
+        containers:
+          app:
+            image:
+              repository: gabisonfire/knightcrawler-migrator
+              tag: "2.0.26"
+            env:
+              TZ: "${TZ}"
+              DEBUG_MODE: "false"
+              POSTGRES_HOST: "knightcrawler-postgres"
+              POSTGRES_PORT: "5432"
+              POSTGRES_USER: "postgres"
+              POSTGRES_PASSWORD: "postgres"
+              POSTGRES_DB: "knightcrawler"
+              REDIS_HOST: "knightcrawler-redis"
+              REDIS_PORT: "6379"
+              REDIS_EXTRA: "abortConnect=false,allowAdmin=true"
+              RABBITMQ_HOST: "knightcrawler-lavinmq"
+              RABBITMQ_USER: "guest"
+              RABBITMQ_PASSWORD: "guest"
+              RABBITMQ_CONSUMER_QUEUE_NAME: "ingested"
+              RABBITMQ_DURABLE: "true"
+              RABBITMQ_MAX_QUEUE_SIZE: "0"
+              RABBITMQ_MAX_PUBLISH_BATCH_SIZE: "500"
+              RABBITMQ_PUBLISH_INTERVAL_IN_SECONDS: "10"
+              METADATA_INSERT_BATCH_SIZE: "50000"
+              COLLECTOR_QBIT_ENABLED: "false"
+              COLLECTOR_DEBRID_ENABLED: "false"
+              COLLECTOR_REAL_DEBRID_API_KEY: ""
+              QBIT_REPLICAS: "0"
+    defaultPodOptions:
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault

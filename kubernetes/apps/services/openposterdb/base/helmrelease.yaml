@@ -1,0 +1,61 @@
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: openposterdb
+spec:
+  interval: 1h
+  chartRef:
+    kind: OCIRepository
+    name: openposterdb
+  values:
+    controllers:
+      openposterdb:
+        containers:
+          app:
+            image:
+              repository: pnrxa/openposterdb
+              tag: latest
+            env:
+              LISTEN_ADDR: "0.0.0.0:3000"
+              CACHE_DIR: "/data/cache"
+              DB_DIR: "/data/db"
+              TMDB_API_KEY: "${OPENPOSTERDB_TMDB_API_KEY}"
+              MDBLIST_API_KEY: "${OPENPOSTERDB_MDBLIST_API_KEY}"
+              JWT_SECRET: "${OPENPOSTERDB_JWT_SECRET}"
+              COOKIE_SECURE: "false"
+              ADMIN_USERNAME: "${OPENPOSTERDB_ADMIN_USERNAME}"
+              ADMIN_PASSWORD: "${OPENPOSTERDB_ADMIN_PASSWORD}"
+              RUST_LOG: "warn"
+              TZ: "${TZ}"
+            resources:
+              requests:
+                cpu: 50m
+                memory: 128Mi
+              limits:
+                memory: 512Mi
+            securityContext:
+              runAsNonRoot: true
+              allowPrivilegeEscalation: false
+              capabilities:
+                drop: ["ALL"]
+    defaultPodOptions:
+      securityContext:
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        fsGroupChangePolicy: OnRootMismatch
+        seccompProfile:
+          type: RuntimeDefault
+    service:
+      app:
+        ports:
+          http:
+            port: 3000
+    persistence:
+      data:
+        type: persistentVolumeClaim
+        storageClass: longhorn
+        accessMode: ReadWriteMany
+        size: 10Gi
+        globalMounts:
+          - path: /data

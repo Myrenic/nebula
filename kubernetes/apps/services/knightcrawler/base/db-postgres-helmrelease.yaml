@@ -1,0 +1,46 @@
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: knightcrawler-postgres
+spec:
+  interval: 1h
+  chartRef:
+    kind: OCIRepository
+    name: knightcrawler
+  values:
+    controllers:
+      knightcrawler-postgres:
+        containers:
+          app:
+            image:
+              repository: postgres
+              tag: 18-alpine
+            env:
+              POSTGRES_USER: "postgres"
+              POSTGRES_PASSWORD: "postgres"
+              POSTGRES_DB: "knightcrawler"
+              TZ: "${TZ}"
+            resources:
+              requests:
+                cpu: 100m
+                memory: 256Mi
+              limits:
+                memory: 1Gi
+    defaultPodOptions:
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
+    service:
+      postgres:
+        controller: knightcrawler-postgres
+        ports:
+          postgres:
+            port: 5432
+    persistence:
+      data:
+        type: persistentVolumeClaim
+        storageClass: longhorn
+        accessMode: ReadWriteOnce
+        size: 20Gi
+        globalMounts:
+          - path: /var/lib/postgresql

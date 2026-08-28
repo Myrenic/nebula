@@ -1,0 +1,44 @@
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: mediaflow-proxy
+spec:
+  interval: 1h
+  chartRef:
+    kind: OCIRepository
+    name: mediaflow-proxy
+  values:
+    controllers:
+      mediaflow-proxy:
+        containers:
+          app:
+            image:
+              repository: mhdzumair/mediaflow-proxy
+              tag: latest
+            env:
+              API_PASSWORD: ""
+              PROXY_URL: ""
+              TRANSPORT_ROUTES: "{}"
+            resources:
+              requests:
+                cpu: 50m
+                memory: 128Mi
+              limits:
+                memory: 512Mi
+            securityContext:
+              runAsNonRoot: true
+              allowPrivilegeEscalation: false
+              capabilities:
+                drop: ["ALL"]
+    defaultPodOptions:
+      securityContext:
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+    service:
+      app:
+        ports:
+          http:
+            port: 8888

@@ -1,0 +1,17 @@
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: aiometadata
+  namespace: network
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    - match: Host(`aiometadata.${SECRET_DOMAIN_0}`)
+      kind: Rule
+      services:
+        - name: aiometadata
+          namespace: services
+          port: 3232
+  tls:
+    secretName: domain-0-prod-tls

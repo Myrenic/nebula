@@ -3,5 +3,17 @@ kind: Kustomization
 resources:
   - ./namespace.yaml
   - aiostreams
+  - aiomanager
+  - aiometadata
+  - comet
+  - knightcrawler
+  - mediaflow-proxy
+  - mediafusion
+  - nzbdav
+  - openposterdb
+  - prowlarr
+  - spottarr
   - stremthru
+  - subtitles
+  - uptime-kuma
 

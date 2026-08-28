@@ -1,0 +1,17 @@
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: comet
+  namespace: network
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    - match: Host(`comet.${SECRET_DOMAIN_0}`)
+      kind: Rule
+      services:
+        - name: comet
+          namespace: services
+          port: 2020
+  tls:
+    secretName: domain-0-prod-tls

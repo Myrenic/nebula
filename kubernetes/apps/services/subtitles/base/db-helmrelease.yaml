@@ -1,0 +1,49 @@
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: subtitles-db
+spec:
+  interval: 1h
+  chartRef:
+    kind: OCIRepository
+    name: subtitles
+  values:
+    controllers:
+      subtitles-db:
+        containers:
+          app:
+            image:
+              repository: mariadb
+              tag: "11"
+            env:
+              MARIADB_ROOT_PASSWORD: "${SUBTITLES_DB_ROOT_PASSWORD}"
+              MARIADB_DATABASE: "stremio_subs"
+              MARIADB_USER: "stremio"
+              MARIADB_PASSWORD: "${SUBTITLES_DB_PASSWORD}"
+              TZ: "${TZ}"
+            args:
+              - "--character-set-server=utf8mb4"
+              - "--collation-server=utf8mb4_unicode_ci"
+            resources:
+              requests:
+                cpu: 100m
+                memory: 256Mi
+              limits:
+                memory: 1Gi
+    defaultPodOptions:
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
+    service:
+      mariadb:
+        ports:
+          mariadb:
+            port: 3306
+    persistence:
+      data:
+        type: persistentVolumeClaim
+        storageClass: longhorn
+        accessMode: ReadWriteOnce
+        size: 10Gi
+        globalMounts:
+          - path: /var/lib/mysql

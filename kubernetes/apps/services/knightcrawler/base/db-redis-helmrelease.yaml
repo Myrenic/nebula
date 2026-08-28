@@ -1,0 +1,41 @@
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: knightcrawler-redis
+spec:
+  interval: 1h
+  chartRef:
+    kind: OCIRepository
+    name: knightcrawler
+  values:
+    controllers:
+      knightcrawler-redis:
+        containers:
+          app:
+            image:
+              repository: redis/redis-stack
+              tag: latest
+            resources:
+              requests:
+                cpu: 50m
+                memory: 128Mi
+              limits:
+                memory: 512Mi
+    defaultPodOptions:
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
+    service:
+      redis:
+        controller: knightcrawler-redis
+        ports:
+          redis:
+            port: 6379
+    persistence:
+      data:
+        type: persistentVolumeClaim
+        storageClass: longhorn
+        accessMode: ReadWriteOnce
+        size: 10Gi
+        globalMounts:
+          - path: /data

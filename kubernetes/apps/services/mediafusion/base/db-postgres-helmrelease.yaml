@@ -1,0 +1,59 @@
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: mediafusion-postgres
+spec:
+  interval: 1h
+  chartRef:
+    kind: OCIRepository
+    name: mediafusion
+  values:
+    controllers:
+      mediafusion-postgres:
+        containers:
+          app:
+            image:
+              repository: postgres
+              tag: "18-alpine"
+            args:
+              - "postgres"
+              - "-c"
+              - "shared_buffers=256MB"
+              - "-c"
+              - "effective_cache_size=768MB"
+              - "-c"
+              - "maintenance_work_mem=128MB"
+              - "-c"
+              - "max_connections=100"
+              - "-c"
+              - "shared_preload_libraries=pg_stat_statements"
+            env:
+              POSTGRES_USER: "mediafusion"
+              POSTGRES_PASSWORD: "mediafusion"
+              POSTGRES_DB: "mediafusion"
+              POSTGRES_INITDB_ARGS: "--data-checksums"
+              TZ: "${TZ}"
+            resources:
+              requests:
+                cpu: 100m
+                memory: 256Mi
+              limits:
+                memory: 1Gi
+    defaultPodOptions:
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
+    service:
+      postgres:
+        controller: mediafusion-postgres
+        ports:
+          postgres:
+            port: 5432
+    persistence:
+      data:
+        type: persistentVolumeClaim
+        storageClass: longhorn
+        accessMode: ReadWriteOnce
+        size: 10Gi
+        globalMounts:
+          - path: /var/lib/postgresql
