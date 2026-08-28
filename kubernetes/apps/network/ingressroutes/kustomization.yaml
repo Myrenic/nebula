@@ -16,7 +16,6 @@ resources:
   - ./obsidiansync.yaml
   - ./nexus.yaml
   - ./coder.yaml
-  - ./pihole.yaml
   - ./grafana.yaml
   - ./stremthru.yaml
   - ./zigbee2mqtt.yaml

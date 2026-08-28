@@ -7,7 +7,6 @@ resources:
   - network
   - storage
   - backup
-  - database
   - services
   - auth
   - monitoring

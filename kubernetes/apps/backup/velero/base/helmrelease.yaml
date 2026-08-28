@@ -174,8 +174,7 @@ spec:
           labelSelector:
             matchLabels:
               app.kubernetes.io/name: stremthru
-      # Home Assistant — config PVC + CNPG cluster resources.
-      # A CHECKPOINT hook runs before the PVC snapshot for safer DB state.
+      # Home Assistant — config PVC backup (HA itself runs outside the cluster).
       homeassistant-daily:
         schedule: "20 3 * * *"
         template:
@@ -183,12 +182,9 @@ spec:
           storageLocation: default
           includedNamespaces:
             - services
-            - cnpg-system
           orLabelSelectors:
             - matchLabels:
                 app.kubernetes.io/name: homeassistant
-            - matchLabels:
-                cnpg.io/cluster: homeassistant
       homeassistant-monthly:
         schedule: "20 5 1 * *"
         template:
@@ -196,28 +192,6 @@ spec:
           storageLocation: default
           includedNamespaces:
             - services
-            - cnpg-system
           orLabelSelectors:
             - matchLabels:
                 app.kubernetes.io/name: homeassistant
-            - matchLabels:
-                cnpg.io/cluster: homeassistant
-      # Database operator backup — K8s resources only, no raw PVC backup.
-      # CNPG Cluster data must be backed up via Barman (configured per-Cluster).
-      # Raw filesystem backup of live PostgreSQL data is unsafe and inconsistent.
-      cnpg-daily:
-        schedule: "40 3 * * *"
-        template:
-          ttl: 168h0m0s
-          storageLocation: default
-          includedNamespaces:
-            - cnpg-system
-          defaultVolumesToFsBackup: false
-      cnpg-monthly:
-        schedule: "40 5 1 * *"
-        template:
-          ttl: 1440h0m0s
-          storageLocation: default
-          includedNamespaces:
-            - cnpg-system
-          defaultVolumesToFsBackup: false
