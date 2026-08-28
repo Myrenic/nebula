@@ -4,9 +4,10 @@ kind: Service
 metadata:
   name: traefik
   namespace: network
+  annotations:
+    metallb.io/loadBalancerIPs: 10.0.50.4
 spec:
   type: LoadBalancer
-  loadBalancerIP: 10.0.69.100
   externalTrafficPolicy: Local
   ports:
     - name: web
