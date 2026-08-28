@@ -26,15 +26,16 @@ spec:
               limits:
                 memory: 512Mi
             securityContext:
-              runAsNonRoot: true
+              runAsNonRoot: false
               allowPrivilegeEscalation: false
               capabilities:
+                add: ["CHOWN", "SETGID", "SETUID"]
                 drop: ["ALL"]
     defaultPodOptions:
       securityContext:
-        runAsUser: 1000
-        runAsGroup: 1000
-        fsGroup: 1000
+        runAsUser: 0
+        runAsGroup: 0
+        fsGroup: 0
         fsGroupChangePolicy: OnRootMismatch
         seccompProfile:
           type: RuntimeDefault
