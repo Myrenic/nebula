@@ -1,0 +1,19 @@
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: catch-all
+  namespace: network
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    - match: HostRegexp(`.+`)
+      kind: Rule
+      priority: 1
+      middlewares:
+        - name: redirect-to-youtube
+          namespace: network
+      services:
+        - kind: TraefikService
+          name: api@internal
+  tls: {}

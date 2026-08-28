@@ -1,0 +1,17 @@
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: pihole
+  namespace: network
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    - match: Host(`pihole.${SECRET_DOMAIN_0}`)
+      kind: Rule
+      services:
+        - name: pihole-admin
+          namespace: network
+          port: 80
+  tls:
+    secretName: domain-0-prod-tls

@@ -1,0 +1,14 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - common
+  - flux-system
+  - cert-manager
+  - network
+  - storage
+  - backup
+  - database
+  - dev-platform
+  - services
+  - auth
+  - monitoring

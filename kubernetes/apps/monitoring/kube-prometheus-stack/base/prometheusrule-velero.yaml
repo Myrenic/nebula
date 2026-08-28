@@ -1,0 +1,86 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: velero-backup-health
+  labels:
+    release: kube-prometheus-stack
+spec:
+  groups:
+    - name: velero-backup-health
+      rules:
+        - alert: VeleroBackupFailures
+          expr: |
+            increase(velero_backup_failure_total[6h]) > 0
+            or
+            increase(velero_backup_partial_failure_total[6h]) > 0
+            or
+            increase(velero_backup_validation_failure_total[6h]) > 0
+          for: 15m
+          labels:
+            severity: critical
+          annotations:
+            summary: Velero backup reported failures
+            description: Velero schedule {{ $labels.schedule }} has backup failures in the last 6 hours.
+        - alert: VeleroBackupStale
+          expr: |
+            (
+              velero_backup_success_total > 0
+              and
+              velero_schedule_expected_interval_seconds > 0
+            )
+            and on (schedule)
+            (
+              time() - velero_backup_last_successful_timestamp
+              > (velero_schedule_expected_interval_seconds * 1.5)
+            )
+          for: 2h
+          labels:
+            severity: critical
+          annotations:
+            summary: Velero backup is stale
+            description: Velero schedule {{ $labels.schedule }} has not completed successfully within 1.5x its expected interval.
+        - alert: VeleroBackupStorageLocationUnavailable
+          expr: min_over_time(velero_backup_location_status_gauge[15m]) < 1
+          for: 15m
+          labels:
+            severity: critical
+          annotations:
+            summary: Velero backup storage location unavailable
+            description: Velero backup location {{ $labels.backup_location_name }} has been unavailable for at least 15 minutes.
+        - alert: VeleroKopiaMaintenanceJobFailed
+          expr: |
+            max by (namespace, job_name, reason) (
+              kube_job_status_failed{namespace="velero", job_name=~".*-kopia-maintain-job-.*"} == 1
+            )
+            and on (namespace, job_name)
+            (
+              time() - kube_job_status_start_time{namespace="velero", job_name=~".*-kopia-maintain-job-.*"} < 21600
+            )
+          for: 15m
+          labels:
+            severity: warning
+          annotations:
+            summary: Velero Kopia maintenance job failed
+            description: 'Velero maintenance job {{ $labels.job_name }} failed within the last 6 hours (reason: {{ $labels.reason }}).'
+        - alert: VeleroUIUnavailable
+          expr: |
+            kube_deployment_spec_replicas{namespace="velero", deployment="velero-ui"} > 0
+            and
+            kube_deployment_status_replicas_available{namespace="velero", deployment="velero-ui"} < 1
+          for: 15m
+          labels:
+            severity: warning
+          annotations:
+            summary: Velero UI is unavailable
+            description: The velero-ui deployment has had no available replicas for at least 15 minutes.
+        - alert: VeleroServerUnavailable
+          expr: |
+            kube_deployment_spec_replicas{namespace="velero", deployment="velero"} > 0
+            and
+            kube_deployment_status_replicas_available{namespace="velero", deployment="velero"} < 1
+          for: 15m
+          labels:
+            severity: critical
+          annotations:
+            summary: Velero server is unavailable
+            description: The velero deployment has had no available replicas for at least 15 minutes.

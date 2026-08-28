@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: pihole-custom-dns
+  namespace: network
+data:
+  02-custom.conf: |
+    # Forward .lan hostnames to the router DNS for DHCP-registered devices.
+    server=/lan/10.0.69.1
+    # Reverse lookups for LAN range via the router.
+    rev-server=10.0.69.0/24,10.0.69.1

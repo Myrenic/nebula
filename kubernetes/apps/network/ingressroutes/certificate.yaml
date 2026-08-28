@@ -1,0 +1,16 @@
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: domain-0-prod-tls
+  namespace: network
+spec:
+  secretName: domain-0-prod-tls
+  issuerRef:
+    name: domain-0-prod
+    kind: ClusterIssuer
+    group: cert-manager.io
+  commonName: "${SECRET_DOMAIN_0}"
+  dnsNames:
+    - "${SECRET_DOMAIN_0}"
+    - "*.${SECRET_DOMAIN_0}"

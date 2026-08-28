@@ -1,0 +1,51 @@
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: monitoring-kube-prometheus-stack
+  namespace: flux-system
+spec:
+  targetNamespace: monitoring
+  interval: 1h
+  retryInterval: 1m
+  timeout: 5m
+  prune: true
+  wait: true
+  path: ./kubernetes/apps/monitoring/kube-prometheus-stack/base
+  sourceRef:
+    kind: GitRepository
+    name: flux-system
+    namespace: flux-system
+  postBuild:
+    substituteFrom:
+      - kind: Secret
+        name: cluster-secrets
+        optional: false
+  decryption:
+    provider: sops
+    secretRef:
+      name: sops-age
+  healthChecks:
+    - apiVersion: helm.toolkit.fluxcd.io/v2
+      kind: HelmRelease
+      name: kube-prometheus-stack
+      namespace: monitoring
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: monitoring-kube-prometheus-stack-rules
+  namespace: flux-system
+spec:
+  targetNamespace: monitoring
+  interval: 1h
+  retryInterval: 1m
+  timeout: 2m
+  prune: true
+  dependsOn:
+    - name: monitoring-kube-prometheus-stack
+  path: ./kubernetes/apps/monitoring/kube-prometheus-stack/rules
+  sourceRef:
+    kind: GitRepository
+    name: flux-system
+    namespace: flux-system
+

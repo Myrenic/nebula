@@ -1,0 +1,23 @@
+# yaml-language-server: $schema=https://json.schemastore.org/kustomization
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - ./certificate.yaml
+  - ./middlewares.yaml
+  - ./oauth2-proxy.yaml
+  - ./flux-operator.yaml
+  - ./hermes-agent.yaml
+  - ./longhorn.yaml
+  - ./homeassistant.yaml
+  - ./homeassistant-k8s.yaml
+  - ./aiostreams.yaml
+  - ./traefik.yaml
+  - ./velero-ui.yaml
+  - ./obsidiansync.yaml
+  - ./nexus.yaml
+  - ./coder.yaml
+  - ./pihole.yaml
+  - ./grafana.yaml
+  - ./stremthru.yaml
+  - ./zigbee2mqtt.yaml
+  - ./catch-all.yaml

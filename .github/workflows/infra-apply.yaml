@@ -1,0 +1,87 @@
+name: Infrastructure Auto-Apply
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'infrastructure/stacks/**'
+      - 'infrastructure/modules/**'
+      - 'infrastructure/patches/**'
+      - 'infrastructure/infra.json'
+
+  workflow_dispatch:
+    inputs:
+      stack:
+        description: 'Specific stack to apply (leave empty for all changed)'
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: infra-apply-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  detect-changes:
+    runs-on: self-hosted
+    outputs:
+      stacks: ${{ steps.changes.outputs.stacks }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Detect changed stacks
+        id: changes
+        env:
+          BASE_SHA: ${{ github.event.before }}
+          HEAD_SHA: ${{ github.sha }}
+          STACK: ${{ inputs.stack }}
+        run: |
+          args=(--mode apply --head-sha "$HEAD_SHA")
+          if [ -n "$STACK" ]; then
+            args+=(--stack "$STACK")
+          else
+            args+=(--base-sha "$BASE_SHA")
+          fi
+          python3 scripts/detect_infra_changes.py "${args[@]}" >> "$GITHUB_OUTPUT"
+
+  apply:
+    needs: detect-changes
+    if: needs.detect-changes.outputs.stacks != '[]'
+    runs-on: self-hosted
+    strategy:
+      matrix:
+        stack: ${{ fromJson(needs.detect-changes.outputs.stacks) }}
+      max-parallel: 1
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: OpenTofu Init
+        working-directory: infrastructure/stacks/${{ matrix.stack }}
+        env:
+          PATH: /usr/local/bin:/usr/bin:/bin
+          HOME: /opt/actions-runner
+          AWS_ACCESS_KEY_ID: ${{ secrets.GARAGE_ACCESS_KEY }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.GARAGE_SECRET_KEY }}
+        run: |
+          tofu init -input=false
+
+      - name: OpenTofu Apply
+        working-directory: infrastructure/stacks/${{ matrix.stack }}
+        env:
+          SOPS_AGE_KEY: ${{ secrets.SOPS_AGE_KEY }}
+          PATH: /usr/local/bin:/usr/bin:/bin
+          HOME: /opt/actions-runner
+          AWS_ACCESS_KEY_ID: ${{ secrets.GARAGE_ACCESS_KEY }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.GARAGE_SECRET_KEY }}
+        run: |
+          # Write age key to temp file for sops
+          KEYFILE=$(mktemp)
+          echo "$SOPS_AGE_KEY" > "$KEYFILE"
+          export SOPS_AGE_KEY_FILE="$KEYFILE"
+          sops exec-file --filename infra.json ../../infra.json \
+            "tofu apply -auto-approve -input=false -compact-warnings -var-file={}"
+          rm -f "$KEYFILE"

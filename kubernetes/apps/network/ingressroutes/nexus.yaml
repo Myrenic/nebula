@@ -1,0 +1,35 @@
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: nexusup
+  namespace: network
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    - match: Host(`nexusup.${SECRET_DOMAIN_0}`)
+      kind: Rule
+      services:
+        - name: nexusup
+          namespace: services
+          port: 8081
+  tls:
+    secretName: domain-0-prod-tls
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: nexusdown
+  namespace: network
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    - match: Host(`nexusdown.${SECRET_DOMAIN_0}`)
+      kind: Rule
+      services:
+        - name: nexusdown
+          namespace: services
+          port: 8081
+  tls:
+    secretName: domain-0-prod-tls

@@ -1,0 +1,18 @@
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: coder-db
+spec:
+  instances: 1
+  storage:
+    size: 10Gi
+    storageClass: longhorn
+  bootstrap:
+    initdb:
+      database: coder
+      owner: coder
+  inheritedMetadata:
+    annotations:
+      pre.hook.backup.velero.io/command: '["/bin/bash", "-c", "psql -U postgres -c CHECKPOINT"]'
+      pre.hook.backup.velero.io/container: postgres
+      pre.hook.backup.velero.io/timeout: "60s"

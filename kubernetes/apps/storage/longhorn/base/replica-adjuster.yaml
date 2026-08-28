@@ -1,0 +1,85 @@
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: longhorn-replica-adjuster
+  namespace: storage
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: longhorn-replica-adjuster
+rules:
+  - apiGroups: [""]
+    resources: ["nodes"]
+    verbs: ["list", "get"]
+  - apiGroups: ["longhorn.io"]
+    resources: ["settings", "volumes"]
+    verbs: ["get", "list", "patch", "update"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: longhorn-replica-adjuster
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: longhorn-replica-adjuster
+subjects:
+  - kind: ServiceAccount
+    name: longhorn-replica-adjuster
+    namespace: storage
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: longhorn-replica-adjuster
+  namespace: storage
+spec:
+  schedule: "*/5 * * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          serviceAccountName: longhorn-replica-adjuster
+          restartPolicy: OnFailure
+          containers:
+            - name: adjuster
+              image: bitnami/kubectl:latest
+              command:
+                - /bin/sh
+                - -c
+                - |
+                  set -e
+
+                  # Count nodes with Ready=True condition
+                  READY_NODES=$(kubectl get nodes -o jsonpath='{range .items[*]}{range .status.conditions[?(@.type=="Ready")]}{.status}{"\n"}{end}{end}' | grep -c "True" || echo "0")
+                  echo "Ready nodes: ${READY_NODES}"
+
+                  # Determine target replica count
+                  if [ "${READY_NODES}" -ge 2 ]; then
+                    TARGET_REPLICAS=2
+                  else
+                    TARGET_REPLICAS=1
+                  fi
+
+                  # Read current Longhorn setting
+                  CURRENT=$(kubectl -n storage get settings.longhorn.io default-replica-count -o jsonpath='{.value}' 2>/dev/null || echo "unknown")
+                  echo "Current default-replica-count: ${CURRENT}, target: ${TARGET_REPLICAS}"
+
+                  if [ "${CURRENT}" != "${TARGET_REPLICAS}" ]; then
+                    echo "Updating default-replica-count to ${TARGET_REPLICAS}"
+                    kubectl -n storage patch settings.longhorn.io default-replica-count \
+                      --type merge -p "{\"value\": \"${TARGET_REPLICAS}\"}"
+
+                    # Also update allow-volume-creation-with-degraded-availability
+                    if [ "${TARGET_REPLICAS}" -eq 1 ]; then
+                      kubectl -n storage patch settings.longhorn.io allow-volume-creation-with-degraded-availability \
+                        --type merge -p '{"value": "true"}'
+                    fi
+                  else
+                    echo "No change needed"
+                  fi

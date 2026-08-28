@@ -1,0 +1,127 @@
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: velero-ui
+spec:
+  interval: 1h
+  chart:
+    spec:
+      chart: velero-ui
+      version: 0.14.0
+      sourceRef:
+        kind: HelmRepository
+        name: otwld
+      interval: 15m
+  # A cold cluster recovery can leave the UI initializing for longer than the
+  # default 10 minute Helm wait; allow the startup probe to finish before
+  # Helm marks the release failed and rolls it back.
+  timeout: 20m
+  install:
+    remediation:
+      retries: 3
+  upgrade:
+    remediation:
+      retries: 3
+  postRenderers:
+    - kustomize:
+        patches:
+          - target:
+              kind: Deployment
+              name: velero-ui
+            patch: |
+              - op: replace
+                path: /spec/replicas
+                value: 2
+              - op: replace
+                path: /spec/strategy
+                value:
+                  type: RollingUpdate
+                  rollingUpdate:
+                    maxSurge: 1
+                    maxUnavailable: 1
+              - op: add
+                path: /spec/template/spec/affinity
+                value:
+                  podAntiAffinity:
+                    requiredDuringSchedulingIgnoredDuringExecution:
+                      - topologyKey: kubernetes.io/hostname
+                        labelSelector:
+                          matchLabels:
+                            app.kubernetes.io/name: velero-ui
+                            app.kubernetes.io/instance: velero-ui
+              - op: add
+                path: /spec/template/spec/topologySpreadConstraints
+                value:
+                  - maxSkew: 1
+                    topologyKey: kubernetes.io/hostname
+                    whenUnsatisfiable: DoNotSchedule
+                    labelSelector:
+                      matchLabels:
+                        app.kubernetes.io/name: velero-ui
+                        app.kubernetes.io/instance: velero-ui
+              - op: add
+                path: /spec/template/spec/containers/0/startupProbe
+                value:
+                  httpGet:
+                    path: /health
+                    port: http
+                    scheme: HTTP
+                  periodSeconds: 10
+                  timeoutSeconds: 3
+                  failureThreshold: 60
+                  successThreshold: 1
+              - op: replace
+                path: /spec/template/spec/containers/0/resources
+                value:
+                  requests:
+                    cpu: 25m
+                    memory: 128Mi
+                  limits:
+                    memory: 256Mi
+  values:
+    # Chart 0.14.0 creates the passphrase secret and policy ConfigMap but does not
+    # wire them into the Deployment; inject them explicitly here.
+    configuration:
+      general:
+        veleroNamespace: velero
+        secretPassPhrase:
+          useSecret: true
+          existingSecret: velero-ui-passphrase
+      policies:
+        enabled: true
+
+    env:
+      - name: AUTH_SECRET_PASSPHRASE
+        valueFrom:
+          secretKeyRef:
+            name: velero-ui-passphrase
+            key: pass_phrase
+      - name: BASIC_AUTH_ENABLED
+        value: "false"
+
+    serviceAccount:
+      create: true
+      automount: true
+
+    rbac:
+      create: true
+      clusterAdministrator: true
+
+    resources:
+      requests:
+        cpu: 25m
+        memory: 128Mi
+      limits:
+        memory: 256Mi
+
+    # NestJS startup takes 60–90 s; give the liveness probe enough headroom
+    # so the container is not killed before the app binds to port 3000.
+    livenessProbe:
+      initialDelaySeconds: 120
+
+    readinessProbe:
+      initialDelaySeconds: 60
+
+    service:
+      type: ClusterIP
+      port: 3000

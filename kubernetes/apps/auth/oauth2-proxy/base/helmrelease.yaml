@@ -1,0 +1,59 @@
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: oauth2-proxy
+spec:
+  interval: 1h
+  chart:
+    spec:
+      chart: oauth2-proxy
+      version: 10.4.3
+      sourceRef:
+        kind: HelmRepository
+        name: oauth2-proxy
+      interval: 15m
+  install:
+    remediation:
+      retries: 3
+  upgrade:
+    remediation:
+      retries: 3
+  values:
+    fullnameOverride: oauth2-proxy
+    replicaCount: 2
+    resources:
+      requests:
+        cpu: 10m
+        memory: 64Mi
+      limits:
+        memory: 128Mi
+    podDisruptionBudget:
+      enabled: true
+      minAvailable: 1
+    service:
+      portNumber: 80
+    config:
+      clientID: "${AZURE_CLIENT_ID}"
+      clientSecret: "${AZURE_CLIENT_SECRET}"
+      cookieSecret: "${OAUTH2_PROXY_COOKIE_SECRET}"
+    extraArgs:
+      provider: oidc
+      oidc-issuer-url: "https://login.microsoftonline.com/${AZURE_TENANT_ID}/v2.0"
+      oidc-email-claim: "preferred_username"
+      redirect-url: "https://auth.${SECRET_DOMAIN_0}/oauth2/callback"
+      cookie-domain: ".${SECRET_DOMAIN_0}"
+      whitelist-domain: ".${SECRET_DOMAIN_0}"
+      set-xauthrequest: "true"
+      reverse-proxy: "true"
+      email-domain: "*"
+      cookie-secure: "true"
+      custom-templates-dir: "/templates"
+      scope: "openid email profile"
+    extraVolumes:
+      - name: custom-templates
+        configMap:
+          name: oauth2-proxy-templates
+    extraVolumeMounts:
+      - name: custom-templates
+        mountPath: /templates
+        readOnly: true

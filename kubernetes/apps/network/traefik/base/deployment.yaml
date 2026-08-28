@@ -1,0 +1,72 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: traefik
+  namespace: network
+spec:
+  replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+  selector:
+    matchLabels:
+      app: traefik
+  template:
+    metadata:
+      labels:
+        app: traefik
+    spec:
+      serviceAccountName: traefik-sa
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: DoNotSchedule
+          labelSelector:
+            matchLabels:
+              app: traefik
+      containers:
+        - name: traefik
+          image: traefik:v3.7.0
+          args:
+            - --log.level=INFO
+            - --log.format=json
+            - --api.dashboard=true
+            - --entrypoints.web.address=:80
+            - --entrypoints.web.http.redirections.entrypoint.to=websecure
+            - --entrypoints.web.http.redirections.entrypoint.scheme=https
+            - --entrypoints.websecure.address=:443
+            - --providers.kubernetesingress.ingressclass=traefik
+            - --providers.kubernetesingress.ingressendpoint.hostname=testlab.tuntelder.com
+            - --providers.kubernetescrd
+            - --providers.kubernetescrd.allowCrossNamespace=true
+            # - --experimental.localPlugins.fail2ban.moduleName=github.com/myrenic/fail2ban
+            - --accesslog=true
+            - --accesslog.filters.statuscodes=400-429
+            - --accesslog.format=json
+          ports:
+            - containerPort: 80
+              name: web
+            - containerPort: 443
+              name: websecure
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              memory: 256Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+            runAsNonRoot: false
+            seccompProfile:
+              type: RuntimeDefault
+          volumeMounts:
+            # - name: plugin-fail2ban
+            #   mountPath: /plugins-local/src/github.com/myrenic/fail2ban
+      volumes:
+        # - name: plugin-fail2ban
+        #   configMap:
+        #     name: traefik-plugin-fail2ban

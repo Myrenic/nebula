@@ -1,0 +1,52 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: docker-daemon
+  labels:
+    app.kubernetes.io/name: docker-daemon
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: docker-daemon
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: docker-daemon
+    spec:
+      containers:
+        - name: dockerd
+          image: docker:29-dind
+          args:
+            - dockerd
+            - --host=tcp://0.0.0.0:2375
+            - --host=unix:///var/run/docker.sock
+          env:
+            - name: DOCKER_TLS_CERTDIR
+              value: ""
+            - name: DOCKER_DRIVER
+              value: overlay2
+          ports:
+            - name: docker
+              containerPort: 2375
+          readinessProbe:
+            tcpSocket:
+              port: docker
+          livenessProbe:
+            tcpSocket:
+              port: docker
+          resources:
+            requests:
+              cpu: 250m
+              memory: 512Mi
+            limits:
+              memory: 2Gi
+          securityContext:
+            privileged: true
+          volumeMounts:
+            - name: docker-graph-storage
+              mountPath: /var/lib/docker
+      volumes:
+        - name: docker-graph-storage
+          emptyDir:
+            sizeLimit: 20Gi

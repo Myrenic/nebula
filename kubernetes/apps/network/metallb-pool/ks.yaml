@@ -1,0 +1,24 @@
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: metallb-pool
+  namespace: flux-system
+spec:
+  targetNamespace: network
+  interval: 1h
+  dependsOn:
+    - name: metallb
+      namespace: flux-system
+  retryInterval: 1m
+  timeout: 5m
+  prune: true
+  path: ./kubernetes/apps/network/metallb-pool/base
+  sourceRef:
+    kind: GitRepository
+    name: flux-system
+    namespace: flux-system
+  postBuild:
+    substituteFrom:
+      - kind: Secret
+        name: cluster-secrets
+

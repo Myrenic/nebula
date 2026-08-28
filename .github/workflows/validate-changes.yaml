@@ -1,0 +1,108 @@
+name: Validate Changes
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/infra-apply.yaml'
+      - '.github/workflows/validate-changes.yaml'
+      - 'infrastructure/stacks/**'
+      - 'infrastructure/modules/**'
+      - 'infrastructure/patches/**'
+      - 'infrastructure/infra.json'
+      - 'kubernetes/**'
+      - 'scripts/detect_infra_changes.py'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: validate-changes-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  detect-changes:
+    runs-on: self-hosted
+    outputs:
+      infra_changed: ${{ steps.detect.outputs.infra_changed }}
+      kubernetes_changed: ${{ steps.detect.outputs.kubernetes_changed }}
+      stacks: ${{ steps.detect.outputs.stacks }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Detect changed components
+        id: detect
+        run: |
+          python3 scripts/detect_infra_changes.py \
+            --mode validate \
+            --base-sha "${{ github.event.pull_request.base.sha }}" \
+            --head-sha "${{ github.event.pull_request.head.sha }}" >> "$GITHUB_OUTPUT"
+
+  tofu-fmt:
+    needs: detect-changes
+    if: needs.detect-changes.outputs.infra_changed == 'true'
+    runs-on: self-hosted
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check OpenTofu formatting
+        run: tofu fmt -check -recursive infrastructure
+
+  validate-stacks:
+    needs: detect-changes
+    if: needs.detect-changes.outputs.stacks != '[]'
+    runs-on: self-hosted
+    env:
+      AWS_ACCESS_KEY_ID: validate
+      AWS_SECRET_ACCESS_KEY: validate
+      AWS_EC2_METADATA_DISABLED: true
+      HOME: /opt/actions-runner
+      PATH: /usr/local/bin:/usr/bin:/bin
+    strategy:
+      matrix:
+        stack: ${{ fromJson(needs.detect-changes.outputs.stacks) }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: OpenTofu init
+        working-directory: infrastructure/stacks/${{ matrix.stack }}
+        run: tofu init -backend=false -input=false
+
+      - name: OpenTofu validate
+        working-directory: infrastructure/stacks/${{ matrix.stack }}
+        run: tofu validate -no-color
+
+  validate-provisioning:
+    needs: detect-changes
+    if: needs.detect-changes.outputs.infra_changed == 'true'
+    runs-on: self-hosted
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check Ansible playbook syntax
+        run: |
+          set -euo pipefail
+          for playbook in infrastructure/stacks/*/playbook.yaml; do
+            ansible-playbook --syntax-check -i 'localhost,' -c local "$playbook"
+          done
+
+      - name: Check shell script syntax
+        run: |
+          set -euo pipefail
+          while IFS= read -r script; do
+            bash -n "$script"
+          done < <(find infrastructure -type f -name '*.sh' | sort)
+
+  validate-kubernetes:
+    needs: detect-changes
+    if: needs.detect-changes.outputs.kubernetes_changed == 'true'
+    runs-on: self-hosted
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build Kubernetes apps
+        run: kubectl kustomize kubernetes/apps >/dev/null
+
+      - name: Build Kubernetes bootstrap
+        run: kubectl kustomize kubernetes/bootstrap >/dev/null

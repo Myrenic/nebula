@@ -1,0 +1,223 @@
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: velero
+spec:
+  interval: 1h
+  chart:
+    spec:
+      chart: velero
+      version: 12.0.1
+      sourceRef:
+        kind: HelmRepository
+        name: velero
+      interval: 15m
+  install:
+    crds: CreateReplace
+    remediation:
+      retries: 3
+  upgrade:
+    crds: CreateReplace
+    remediation:
+      retries: 3
+  postRenderers:
+    # The chart exposes affinity natively, but not topology spread constraints.
+    # Keep spread on the Deployment only so Helm's rendered manifest stays targeted.
+    - kustomize:
+        patches:
+          - target:
+              kind: Deployment
+              name: velero
+            patch: |
+              - op: replace
+                path: /spec/replicas
+                value: 2
+              - op: replace
+                path: /spec/strategy
+                value:
+                  type: RollingUpdate
+                  rollingUpdate:
+                    maxSurge: 0
+                    maxUnavailable: 1
+              - op: add
+                path: /spec/template/spec/topologySpreadConstraints
+                value:
+                  - maxSkew: 1
+                    topologyKey: kubernetes.io/hostname
+                    whenUnsatisfiable: DoNotSchedule
+                    labelSelector:
+                      matchLabels:
+                        name: velero
+  values:
+    # Flux manages CRD updates via upgrade.crds: CreateReplace; disable the
+    # chart's own pre-upgrade hook job to prevent it from dead-locking on
+    # small clusters where affinity/scheduling can cause it to time out.
+    upgradeCRDs: false
+
+    credentials:
+      useSecret: true
+      existingSecret: velero-credentials
+
+    initContainers:
+      - name: velero-plugin-for-microsoft-azure
+        image: velero/velero-plugin-for-microsoft-azure:v1.14.0
+        imagePullPolicy: IfNotPresent
+        volumeMounts:
+          - mountPath: /target
+            name: plugins
+
+    configuration:
+      backupStorageLocation:
+        - name: default
+          provider: azure
+          bucket: velero
+          default: true
+          credential:
+            name: velero-credentials
+            key: cloud
+          config:
+            resourceGroup: Velero_Backups
+            storageAccount: velero76b1f66a064d
+      defaultBackupStorageLocation: default
+      defaultBackupTTL: 720h0m0s
+      defaultVolumesToFsBackup: true
+      uploaderType: kopia
+      backupSyncPeriod: 15m
+      defaultRepoMaintainFrequency: 24h
+      repositoryMaintenanceJob:
+        repositoryConfigData:
+          global:
+            keepLatestMaintenanceJobs: 3
+
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits:
+        memory: 1Gi
+
+    affinity:
+      podAntiAffinity:
+        requiredDuringSchedulingIgnoredDuringExecution:
+          - topologyKey: kubernetes.io/hostname
+            labelSelector:
+              matchLabels:
+                name: velero
+
+    extraObjects:
+      - apiVersion: policy/v1
+        kind: PodDisruptionBudget
+        metadata:
+          name: velero
+        spec:
+          minAvailable: 1
+          selector:
+            matchLabels:
+              name: velero
+
+    backupsEnabled: true
+    snapshotsEnabled: false
+    deployNodeAgent: true
+
+    # fs-restore-action-config tells Velero which image to inject as the
+    # restore-helper init container during file-system (kopia) restores.
+    # Since v1.14, velero-restore-helper is merged into the main velero image;
+    # without this ConfigMap Velero falls back to the non-existent
+    # "velero-restore-helper" image name and every PVC restore fails.
+    configMaps:
+      fs-restore-action-config:
+        labels:
+          velero.io/plugin-config: ""
+          velero.io/pod-volume-restore: RestoreItemAction
+        data:
+          image: docker.io/velero/velero:v1.18.0
+
+    schedules:
+      # Application data backup — includes PVC (filesystem backup via kopia)
+      aiostreams-daily:
+        schedule: "0 3 * * *"   # 03:00 every day
+        template:
+          ttl: 168h0m0s         # 7 days
+          storageLocation: default
+          includedNamespaces:
+            - services
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: aiostreams
+      aiostreams-monthly:
+        schedule: "0 5 1 * *"   # 05:00 on the 1st of every month
+        template:
+          ttl: 1440h0m0s        # 60 days (~2 months)
+          storageLocation: default
+          includedNamespaces:
+            - services
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: aiostreams
+      stremthru-daily:
+        schedule: "10 3 * * *"  # 03:10 every day
+        template:
+          ttl: 168h0m0s         # 7 days
+          storageLocation: default
+          includedNamespaces:
+            - services
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: stremthru
+      stremthru-monthly:
+        schedule: "10 5 1 * *"  # 05:10 on the 1st of every month
+        template:
+          ttl: 1440h0m0s        # 60 days (~2 months)
+          storageLocation: default
+          includedNamespaces:
+            - services
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: stremthru
+      # Home Assistant — config PVC + CNPG cluster resources.
+      # A CHECKPOINT hook runs before the PVC snapshot for safer DB state.
+      homeassistant-daily:
+        schedule: "20 3 * * *"
+        template:
+          ttl: 168h0m0s
+          storageLocation: default
+          includedNamespaces:
+            - services
+            - cnpg-system
+          orLabelSelectors:
+            - matchLabels:
+                app.kubernetes.io/name: homeassistant
+            - matchLabels:
+                cnpg.io/cluster: homeassistant
+      homeassistant-monthly:
+        schedule: "20 5 1 * *"
+        template:
+          ttl: 1440h0m0s
+          storageLocation: default
+          includedNamespaces:
+            - services
+            - cnpg-system
+          orLabelSelectors:
+            - matchLabels:
+                app.kubernetes.io/name: homeassistant
+            - matchLabels:
+                cnpg.io/cluster: homeassistant
+      # Database operator backup — K8s resources only, no raw PVC backup.
+      # CNPG Cluster data must be backed up via Barman (configured per-Cluster).
+      # Raw filesystem backup of live PostgreSQL data is unsafe and inconsistent.
+      cnpg-daily:
+        schedule: "40 3 * * *"
+        template:
+          ttl: 168h0m0s
+          storageLocation: default
+          includedNamespaces:
+            - cnpg-system
+          defaultVolumesToFsBackup: false
+      cnpg-monthly:
+        schedule: "40 5 1 * *"
+        template:
+          ttl: 1440h0m0s
+          storageLocation: default
+          includedNamespaces:
+            - cnpg-system
+          defaultVolumesToFsBackup: false

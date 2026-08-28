@@ -1,0 +1,114 @@
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: kube-prometheus-stack
+spec:
+  interval: 1h
+  chart:
+    spec:
+      chart: kube-prometheus-stack
+      version: 83.7.0
+      sourceRef:
+        kind: HelmRepository
+        name: prometheus-community
+      interval: 15m
+  install:
+    remediation:
+      retries: 3
+  upgrade:
+    remediation:
+      retries: 3
+  values:
+    grafana:
+      enabled: true
+      adminUser: "${GRAFANA_ADMIN_USER}"
+      adminPassword: "${GRAFANA_ADMIN_PASSWORD}"
+      replicas: 1
+      resources:
+        requests:
+          cpu: 100m
+          memory: 256Mi
+        limits:
+          cpu: 500m
+          memory: 512Mi
+      sidecar:
+        dashboards:
+          enabled: true
+          label: grafana_dashboard
+          labelValue: "1"
+          searchNamespace: ALL
+          provider:
+            allowUiUpdates: false
+            foldersFromFilesStructure: true
+      additionalDataSources:
+        - name: Loki
+          uid: loki
+          type: loki
+          access: proxy
+          url: http://loki.monitoring.svc.cluster.local:3100
+          isDefault: false
+          editable: true
+          jsonData:
+            maxLines: 1000
+    alertmanager:
+      enabled: true
+      alertmanagerSpec:
+        replicas: 1
+        secrets:
+          - telegram-notification
+        resources:
+          requests:
+            cpu: 50m
+            memory: 128Mi
+          limits:
+            cpu: 250m
+            memory: 256Mi
+      config:
+        global:
+          resolve_timeout: 5m
+        inhibit_rules:
+          - source_matchers:
+              - severity = "critical"
+            target_matchers:
+              - severity =~ "warning|info"
+            equal:
+              - cluster
+              - namespace
+              - alertname
+        route:
+          group_by:
+            - alertname
+            - cluster
+            - namespace
+          group_wait: 2m
+          group_interval: 30m
+          repeat_interval: 24h
+          receiver: "null"
+          routes:
+            - receiver: "null"
+              matchers:
+                - alertname =~ "Watchdog|InfoInhibitor"
+            - receiver: telegram
+              matchers:
+                - severity = "critical"
+        receivers:
+          - name: "null"
+          - name: telegram
+            telegram_configs:
+              - bot_token_file: /etc/alertmanager/secrets/telegram-notification/token
+                chat_id: 783908316
+                parse_mode: HTML
+                send_resolved: false
+    prometheus:
+      enabled: true
+      prometheusSpec:
+        replicas: 1
+        retention: 7d
+        ruleSelectorNilUsesHelmValues: false
+        resources:
+          requests:
+            cpu: 200m
+            memory: 1Gi
+          limits:
+            cpu: 1
+            memory: 2Gi

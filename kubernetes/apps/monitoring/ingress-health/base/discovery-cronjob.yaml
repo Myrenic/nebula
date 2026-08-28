@@ -1,0 +1,142 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ingress-health-discovery-script
+  namespace: monitoring
+data:
+  discover.sh: |
+    #!/usr/bin/env bash
+    set -euo pipefail
+
+    PROBE_NAMESPACE="${PROBE_NAMESPACE:-monitoring}"
+    PROBE_NAME="${PROBE_NAME:-ingress-health}"
+    PROBE_MODULE="${PROBE_MODULE:-https_2xx}"
+    BLACKBOX_URL="${BLACKBOX_URL:-prometheus-blackbox-exporter.monitoring.svc.cluster.local:9115}"
+    WORKDIR="${WORKDIR:-/work}"
+
+    mkdir -p "${WORKDIR}"
+    MATCHES_FILE="${WORKDIR}/ingressroute-matches.txt"
+    TARGETS_FILE="${WORKDIR}/targets.txt"
+    PROBE_MANIFEST="${WORKDIR}/probe.yaml"
+
+    # Gather every Traefik route matcher from every IngressRoute across all namespaces.
+    kubectl get ingressroutes.traefik.io --all-namespaces \
+      -o jsonpath='{range .items[*]}{range .spec.routes[*]}{.match}{"\n"}{end}{end}' \
+      > "${MATCHES_FILE}" || true
+
+    : > "${TARGETS_FILE}"
+
+    while IFS= read -r MATCH_EXPRESSION; do
+      [[ -z "${MATCH_EXPRESSION}" ]] && continue
+
+      # Primary parser: Host(`...`) clauses from Traefik match expressions.
+      HOST_CLAUSES="$(printf '%s\n' "${MATCH_EXPRESSION}" | grep -oE 'Host\([^)]*\)' || true)"
+      # Fallback parser: recover domain-like tokens if Host(...) extraction misses.
+      if [[ -z "${HOST_CLAUSES}" ]]; then
+        HOST_CLAUSES="$(printf '%s\n' "${MATCH_EXPRESSION}" | grep -oE '[A-Za-z0-9.-]+\.[A-Za-z]{2,}' || true)"
+      fi
+
+      while IFS= read -r CLAUSE; do
+        [[ -z "${CLAUSE}" ]] && continue
+
+        NORMALIZED="${CLAUSE}"
+        if [[ "${NORMALIZED}" == Host\(*\) ]]; then
+          NORMALIZED="$(printf '%s' "${NORMALIZED}" | sed -E 's/^Host\((.*)\)$/\1/')"
+        fi
+
+        NORMALIZED="$(printf '%s' "${NORMALIZED}" | sed -E 's/[`"[:space:]]//g')"
+
+        IFS=',' read -r -a HOSTS <<< "${NORMALIZED}"
+        for HOST in "${HOSTS[@]}"; do
+          [[ -z "${HOST}" ]] && continue
+          [[ "${HOST}" == *"*"* ]] && continue
+          if [[ "${HOST}" =~ ^[A-Za-z0-9.-]+$ ]] && [[ "${HOST}" == *.* ]]; then
+            printf 'https://%s\n' "${HOST}" >> "${TARGETS_FILE}"
+          fi
+        done
+      done <<< "${HOST_CLAUSES}"
+    done < "${MATCHES_FILE}"
+
+    sort -u -o "${TARGETS_FILE}" "${TARGETS_FILE}"
+
+    {
+      cat <<EOF
+    apiVersion: monitoring.coreos.com/v1
+    kind: Probe
+    metadata:
+      name: ${PROBE_NAME}
+      namespace: ${PROBE_NAMESPACE}
+      labels:
+        app.kubernetes.io/name: ingress-health
+        release: kube-prometheus-stack
+    spec:
+      jobName: ingress-health
+      interval: 1m
+      scrapeTimeout: 10s
+      module: ${PROBE_MODULE}
+      prober:
+        url: ${BLACKBOX_URL}
+        path: /probe
+      targets:
+        staticConfig:
+          static:
+    EOF
+      if [[ -s "${TARGETS_FILE}" ]]; then
+        while IFS= read -r TARGET; do
+          printf '            - %s\n' "${TARGET}"
+        done < "${TARGETS_FILE}"
+      else
+        # Keep one inert target so Probe stays valid when no hosts are discovered yet.
+        printf '            - https://example.invalid\n'
+      fi
+    } > "${PROBE_MANIFEST}"
+
+    kubectl apply -f "${PROBE_MANIFEST}"
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: ingress-health-discovery
+  namespace: monitoring
+spec:
+  schedule: "*/15 * * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          serviceAccountName: ingress-health-discovery
+          restartPolicy: OnFailure
+          containers:
+            - name: discover
+              image: docker.io/bitnami/kubectl:latest
+              command:
+                - /bin/bash
+                - /scripts/discover.sh
+              env:
+                - name: PROBE_NAMESPACE
+                  value: monitoring
+                - name: PROBE_NAME
+                  value: ingress-health
+                - name: PROBE_MODULE
+                  value: https_2xx
+                - name: BLACKBOX_URL
+                  value: prometheus-blackbox-exporter.monitoring.svc.cluster.local:9115
+                - name: WORKDIR
+                  value: /work
+              volumeMounts:
+                - name: script
+                  mountPath: /scripts
+                  readOnly: true
+                - name: workdir
+                  mountPath: /work
+          volumes:
+            - name: script
+              configMap:
+                name: ingress-health-discovery-script
+                defaultMode: 0755
+            - name: workdir
+              emptyDir: {}

@@ -1,0 +1,43 @@
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: obsidiansync
+  namespace: network
+spec:
+  ports:
+    - name: http
+      port: 5984
+      protocol: TCP
+      targetPort: 5984
+---
+apiVersion: v1
+kind: Endpoints
+metadata:
+  name: obsidiansync
+  namespace: network
+subsets:
+  - addresses:
+      - ip: 10.0.3.46
+    ports:
+      - name: http
+        port: 5984
+        protocol: TCP
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: obsidiansync
+  namespace: network
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    - match: Host(`obsidian.${SECRET_DOMAIN_0}`)
+      kind: Rule
+      services:
+        - name: obsidiansync
+          namespace: network
+          port: 5984
+  tls:
+    secretName: domain-0-prod-tls

@@ -1,0 +1,17 @@
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: homeassistant-k8s
+  namespace: network
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    - match: Host(`homeassistant.${SECRET_DOMAIN_0}`)
+      kind: Rule
+      services:
+        - name: homeassistant
+          namespace: services
+          port: 8123
+  tls:
+    secretName: domain-0-prod-tls

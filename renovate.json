@@ -1,0 +1,30 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:recommended",
+    ":dependencyDashboard",
+    ":semanticCommits"
+  ],
+  "labels": ["dependencies", "renovate"],
+  "enabledManagers": ["flux", "kubernetes", "github-actions"],
+  "flux": {
+    "fileMatch": ["kubernetes/.+\\.yaml$"]
+  },
+  "kubernetes": {
+    "fileMatch": ["kubernetes/.+\\.yaml$"]
+  },
+  "prCreation": "immediate",
+  "prConcurrentLimit": 10,
+  "prHourlyLimit": 2,
+  "separateMajorMinor": true,
+  "packageRules": [
+    {
+      "description": "Automerge safe IaC updates (non-major)",
+      "matchManagers": ["flux", "kubernetes", "github-actions"],
+      "matchUpdateTypes": ["digest", "pin", "patch", "minor"],
+      "automerge": true,
+      "automergeType": "pr",
+      "platformAutomerge": true
+    }
+  ]
+}

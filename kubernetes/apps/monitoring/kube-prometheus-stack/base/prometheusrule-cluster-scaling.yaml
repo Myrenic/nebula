@@ -1,0 +1,80 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: cluster-scaling-guidance
+  labels:
+    release: kube-prometheus-stack
+spec:
+  groups:
+    - name: cluster-node-health
+      rules:
+        - alert: KubernetesNodeNotReady
+          expr: kube_node_status_condition{condition="Ready",status="true"} == 0
+          for: 10m
+          labels:
+            severity: critical
+          annotations:
+            summary: Kubernetes node is not Ready
+            description: Node {{ $labels.node }} has been NotReady for over 10 minutes.
+        - alert: KubernetesNodePressure
+          expr: max by (node, condition) (kube_node_status_condition{condition=~"MemoryPressure|DiskPressure|PIDPressure",status="true"} == 1)
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: Kubernetes node under pressure
+            description: Node {{ $labels.node }} is reporting {{ $labels.condition }} for over 10 minutes.
+    - name: cluster-capacity-guidance
+      rules:
+        - alert: ClusterOverprovisioned
+          expr: |
+            count(kube_node_status_condition{condition="Ready",status="true"} == 1) > 1
+            and
+            (
+              1 - (
+                sum(rate(node_cpu_seconds_total{mode="idle"}[5m]))
+                /
+                sum(rate(node_cpu_seconds_total[5m]))
+              )
+            ) < 0.35
+            and
+            (
+              1 - (
+                sum(node_memory_MemAvailable_bytes)
+                /
+                sum(node_memory_MemTotal_bytes)
+              )
+            ) < 0.50
+          for: 6h
+          labels:
+            severity: info
+          annotations:
+            summary: Cluster appears overprovisioned
+            description: Ready nodes are greater than one while cluster CPU and memory stay low for 6 hours. Consider scaling down.
+        - alert: SingleNodeHighUtilization
+          expr: |
+            count(kube_node_status_condition{condition="Ready",status="true"} == 1) == 1
+            and
+            (
+              (
+                1 - (
+                  sum(rate(node_cpu_seconds_total{mode="idle"}[5m]))
+                  /
+                  sum(rate(node_cpu_seconds_total[5m]))
+                )
+              ) > 0.85
+              or
+              (
+                1 - (
+                  sum(node_memory_MemAvailable_bytes)
+                  /
+                  sum(node_memory_MemTotal_bytes)
+                )
+              ) > 0.90
+            )
+          for: 15m
+          labels:
+            severity: warning
+          annotations:
+            summary: Single-node cluster is highly utilized
+            description: The only Ready node is under sustained CPU or memory pressure. Consider scaling up to at least 2 nodes.

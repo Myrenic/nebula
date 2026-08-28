@@ -1,0 +1,24 @@
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: pihole-coredns
+  namespace: flux-system
+spec:
+  targetNamespace: kube-system
+  interval: 1h
+  dependsOn:
+    - name: pihole
+      namespace: flux-system
+  retryInterval: 1m
+  timeout: 5m
+  prune: true
+  wait: true
+  path: ./kubernetes/apps/network/pihole/coredns
+  sourceRef:
+    kind: GitRepository
+    name: flux-system
+    namespace: flux-system
+  postBuild:
+    substituteFrom:
+      - kind: Secret
+        name: cluster-secrets

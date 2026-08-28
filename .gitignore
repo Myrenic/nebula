@@ -1,0 +1,8 @@
+age.agekey
+inspo/kubernetes/*/*/charts/
+sealed-secret-backup.yaml
+
+# Infrastructure / OpenTofu
+infrastructure/stacks/**/.terraform/
+infrastructure/stacks/**/terraform.tfstate*
+infrastructure/stacks/**/*.bak

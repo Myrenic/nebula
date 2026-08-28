@@ -1,0 +1,27 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: ingress-health
+  labels:
+    release: kube-prometheus-stack
+spec:
+  groups:
+    - name: ingress-health
+      rules:
+        - alert: IngressHealthProbeMissing
+          expr: absent(probe_success{job="ingress-health"})
+          for: 15m
+          labels:
+            severity: warning
+          annotations:
+            summary: Ingress health probe is not being scraped
+            description: Prometheus has not seen any probe_success series for the ingress-health Probe in the last 15 minutes.
+        - alert: IngressProbeFailure
+          expr: |
+            avg_over_time(probe_success{job="ingress-health", instance!="https://example.invalid"}[10m]) < 1
+          for: 10m
+          labels:
+            severity: critical
+          annotations:
+            summary: Ingress endpoint is failing health probes
+            description: The ingress target {{ $labels.instance }} has failed HTTPS probes for at least 10 minutes.
