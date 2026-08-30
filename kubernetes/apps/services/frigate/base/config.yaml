@@ -33,9 +33,12 @@ data:
         enabled: true
         ffmpeg:
           # Reolink stability: force RTSP over TCP (UDP causes dropped
-          # frames). Decode only the low-res sub stream on the iGPU (VAAPI);
-          # the main stream is stream-copied straight to disk for recordings.
+          # frames). Decode only the low-res H.264 sub stream on the iGPU
+          # (VAAPI); the HEVC main stream is stream-copied straight to disk
+          # for recordings (audio is AAC, so it is copied too).
           input_args: preset-rtsp-tcp
+          output_args:
+            record: preset-record-generic-audio-copy
           inputs:
             - path: "${CAMERA_RTSP_MAIN}"
               roles: [record]
