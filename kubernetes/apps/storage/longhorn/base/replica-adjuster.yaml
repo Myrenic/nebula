@@ -83,3 +83,14 @@ spec:
                   else
                     echo "No change needed"
                   fi
+
+                  # Converge EXISTING volumes to the target replica count, so
+                  # volumes created under a different node count do not keep
+                  # double-booking storage (2 replicas on 1 node) or stay
+                  # under-replicated after the cluster grows.
+                  for v in $(kubectl -n storage get volumes.longhorn.io \
+                      -o jsonpath="{range .items[?(@.spec.numberOfReplicas!='${TARGET_REPLICAS}')]}{.metadata.name}{\" \"}{end}"); do
+                    echo "Setting volume ${v} to ${TARGET_REPLICAS} replicas"
+                    kubectl -n storage patch volume "${v}" \
+                      --type merge -p "{\"spec\":{\"numberOfReplicas\":\"${TARGET_REPLICAS}\"}}"
+                  done

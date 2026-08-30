@@ -50,6 +50,13 @@ spec:
           http:
             port: 4949
     persistence:
+      instance:
+        # The image writes flask instance files to /app/instance, which is a
+        # root-owned image-layer path and not covered by any PVC; give it a
+        # writable scratch volume instead of running the container as root.
+        type: emptyDir
+        globalMounts:
+          - path: /app/instance
       data:
         type: persistentVolumeClaim
         storageClass: longhorn

@@ -28,7 +28,11 @@ spec:
       replicaAutoBalance: best-effort
       allowVolumeCreationWithDegradedAvailability: true
     persistence:
-      defaultClassReplicaCount: 2
+      # Single-node Omni cluster: hardcoding 2 would double-book every PVC on
+      # one disk and wedge new volumes behind Longhorn's storage reservation
+      # guard. The replica-adjuster cronjob raises existing volumes back to 2
+      # automatically once a second node is Ready.
+      defaultClassReplicaCount: 1
       allowVolumeExpansion: true
       reclaimPolicy: Retain
       volumeBindingMode: Immediate
