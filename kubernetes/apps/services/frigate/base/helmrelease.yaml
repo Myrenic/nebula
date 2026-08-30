@@ -44,6 +44,8 @@ spec:
         ports:
           http:
             port: 8971
+          http-internal:
+            port: 5000
           rtsp:
             port: 8554
           webrtc-tcp:
