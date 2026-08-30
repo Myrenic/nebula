@@ -4,24 +4,27 @@ Kubernetes homelab managed by [Flux CD](https://fluxcd.io/) with [SOPS](https://
 
 ## Bootstrap
 
+The only prerequisite on the machine running the bootstrap is `kubectl`/`kustomize`, a kubeconfig for the target cluster, and the SOPS age key (kept outside this repo, e.g. in the Orbit repo - `age.agekey` is gitignored here on purpose).
+
 ```bash
-# 1. Install Flux
-kubectl apply -f https://github.com/fluxcd/flux2/releases/download/v2.7.5/install.yaml
+# 1. Install Flux (controllers + CRDs) and the Git sync config in one shot.
+#    This is the only thing the bootstrap file does; it is intentionally
+#    self-contained and does NOT include secrets.
+kubectl apply -k kubernetes/bootstrap
 
-# 2. Create the SOPS age secret (for decrypting secrets in-repo)
-cat age.agekey | kubectl create secret generic sops-age \
-  --namespace=flux-system --from-file=age.agekey=/dev/stdin
+# 2. Give Flux the age key so the root Kustomization can decrypt the
+#    .sops.yaml files (spec.decryption is already configured on it).
+kubectl -n flux-system create secret generic sops-age \
+  --from-file=age.agekey=<path-to-age.agekey>
 
-# 3. Apply the Git repo credentials secret
-sops -d ./kubernetes/apps/flux-system/flux-instance/flux-system-secret.sops.yaml \
-  | kubectl apply -f -
-
-# 4. Apply the Flux sync configuration
-kustomize build ./kubernetes/apps/flux-system/flux-instance | kubectl apply -f -
-
-# 5. Wait — Flux reconciles everything else automatically
+# 3. Watch Flux reconcile everything else.
 flux get kustomizations --watch
 ```
+
+Notes:
+
+- The `GitRepository` clones `https://github.com/myrenic/nebula` anonymously (the repo is public). No deploy key is involved; if the repo ever becomes private, switch the URL in `kubernetes/apps/flux-system/flux-instance/gotk-sync.yaml` to `ssh://git@github.com/myrenic/nebula` and apply a decrypted `flux-system` deploy-key secret manually.
+- `kubernetes/apps/flux-system/flux-instance/flux-system-secret.sops.yaml` is kept only as an encrypted backup of the old deploy key and is not part of any kustomization.
 
 ## Infra automation runner
 
