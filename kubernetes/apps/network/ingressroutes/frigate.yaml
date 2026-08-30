@@ -9,9 +9,11 @@ spec:
   routes:
     - match: Host(`frigate.${SECRET_DOMAIN_0}`)
       kind: Rule
+      middlewares:
+        - name: lan-only
       services:
         - name: frigate
           namespace: services
-          port: 8971
+          port: 5000
   tls:
     secretName: domain-0-prod-tls
