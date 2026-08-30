@@ -46,6 +46,10 @@ data:
               roles: [detect]
               hwaccel_args: preset-vaapi
         detect:
+          # Explicit resolution avoids the 0.17 startup auto-probe, which
+          # hangs on Reolink RTSP streams (documented breaking change).
+          width: 640
+          height: 360
           fps: 5
 
     # 0.17 tiered recording retention: continuous recording stays disabled
