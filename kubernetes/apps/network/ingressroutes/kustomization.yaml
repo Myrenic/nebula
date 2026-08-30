@@ -23,7 +23,6 @@ resources:
   - ./nzbdav.yaml
   - ./obsidiansync.yaml
   - ./oauth2-proxy.yaml
-  - ./openposterdb.yaml
   - ./prowlarr.yaml
   - ./spottarr.yaml
   - ./stremthru.yaml

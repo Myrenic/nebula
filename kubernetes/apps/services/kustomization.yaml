@@ -10,7 +10,6 @@ resources:
   - mediaflow-proxy
   - mediafusion
   - nzbdav
-  - openposterdb
   - prowlarr
   - spottarr
   - stremthru
