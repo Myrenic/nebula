@@ -12,21 +12,41 @@ data:
     mqtt:
       enabled: false
 
+    # Object detection on the Intel iGPU via OpenVINO (bundled SSD MobileNet
+    # v2) instead of the CPU TFLite fallback.
     detectors:
-      cpu:
-        type: cpu
-        num_threads: 2
+      ov:
+        type: openvino
+        device: GPU
+        model:
+          path: /openvino-model/ssdlite_mobilenet_v2.xml
+          width: 300
+          height: 300
+          input_tensor: nhwc
+          input_pixel_format: bgr
+          labelmap_path: /labelmap/coco_91cl_bkgr.txt
 
-    # Intel iGPU hardware decoding. The container gets LIBVA_DRIVER_NAME=iHD;
-    # preset-vaapi auto-selects H.264/H.265 profiles on /dev/dri/renderD128.
-    ffmpeg:
-      hwaccel_args: preset-vaapi
+    cameras:
+      reolink:
+        enabled: true
+        ffmpeg:
+          # Reolink stability: force RTSP over TCP (UDP causes dropped
+          # frames). Decode only the low-res sub stream on the iGPU (VAAPI);
+          # the main stream is stream-copied straight to disk for recordings.
+          input_args: preset-rtsp-tcp
+          inputs:
+            - path: "${CAMERA_RTSP_MAIN}"
+              roles: [record]
+            - path: "${CAMERA_RTSP_SUB}"
+              roles: [detect]
+              hwaccel_args: preset-vaapi
+        detect:
+          fps: 5
 
+    # 0.17 tiered recording retention: continuous recording stays disabled
+    # (default); only alert/detection events are kept.
     record:
       enabled: true
-      retain:
-        days: 3
-        mode: motion
       alerts:
         retain:
           days: 14
@@ -39,14 +59,4 @@ data:
       retain:
         default: 7
 
-    cameras: {}
-    # Add RTSP cameras here, e.g.:
-    # cameras:
-    #   front:
-    #     enabled: true
-    #     ffmpeg:
-    #       inputs:
-    #         - path: rtsp://user:pass@camera-ip:554/stream1
-    #           roles:
-    #             - detect
-    #             - record
+    version: 0.17-0
