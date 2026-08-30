@@ -31,7 +31,7 @@ spec:
             patch: |
               - op: replace
                 path: /spec/replicas
-                value: 2
+                value: 1
               - op: replace
                 path: /spec/strategy
                 value:
@@ -43,18 +43,20 @@ spec:
                 path: /spec/template/spec/affinity
                 value:
                   podAntiAffinity:
-                    requiredDuringSchedulingIgnoredDuringExecution:
-                      - topologyKey: kubernetes.io/hostname
-                        labelSelector:
-                          matchLabels:
-                            app.kubernetes.io/name: velero-ui
-                            app.kubernetes.io/instance: velero-ui
+                    preferredDuringSchedulingIgnoredDuringExecution:
+                      - weight: 100
+                        podAffinityTerm:
+                          topologyKey: kubernetes.io/hostname
+                          labelSelector:
+                            matchLabels:
+                              app.kubernetes.io/name: velero-ui
+                              app.kubernetes.io/instance: velero-ui
               - op: add
                 path: /spec/template/spec/topologySpreadConstraints
                 value:
                   - maxSkew: 1
                     topologyKey: kubernetes.io/hostname
-                    whenUnsatisfiable: DoNotSchedule
+                    whenUnsatisfiable: ScheduleAnyway
                     labelSelector:
                       matchLabels:
                         app.kubernetes.io/name: velero-ui
