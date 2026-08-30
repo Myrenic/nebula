@@ -74,7 +74,7 @@ spec:
       subtitles:
         type: persistentVolumeClaim
         storageClass: longhorn
-        accessMode: ReadWriteMany
+        accessMode: ReadWriteOnce
         size: 20Gi
         globalMounts:
           - path: /app/subtitles
