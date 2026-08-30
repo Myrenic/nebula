@@ -13,18 +13,20 @@ data:
       enabled: false
 
     # Object detection on the Intel iGPU via OpenVINO (bundled SSD MobileNet
-    # v2) instead of the CPU TFLite fallback.
+    # v2) instead of the CPU TFLite fallback. In 0.17 the model config is a
+    # top-level key shared by all detectors.
     detectors:
       ov:
         type: openvino
         device: GPU
-        model:
-          path: /openvino-model/ssdlite_mobilenet_v2.xml
-          width: 300
-          height: 300
-          input_tensor: nhwc
-          input_pixel_format: bgr
-          labelmap_path: /openvino-model/coco_91cl_bkgr.txt
+
+    model:
+      path: /openvino-model/ssdlite_mobilenet_v2.xml
+      width: 300
+      height: 300
+      input_tensor: nhwc
+      input_pixel_format: bgr
+      labelmap_path: /openvino-model/coco_91cl_bkgr.txt
 
     cameras:
       reolink:
