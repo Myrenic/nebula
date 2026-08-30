@@ -32,12 +32,13 @@ data:
       reolink:
         enabled: true
         ffmpeg:
-          # Reolink stability: force RTSP over TCP (UDP causes dropped
-          # frames). VAAPI decodes on the iGPU; only the low-res H.264 sub
-          # stream is decoded for detection, the HEVC main stream is
-          # stream-copied straight to disk for recordings (AAC audio copied).
+          # Reolink stability: preset-rtsp-generic forces RTSP over TCP (UDP
+          # causes dropped frames). VAAPI decodes on the iGPU; only the
+          # low-res H.264 sub stream is decoded for detection, the HEVC main
+          # stream is stream-copied straight to disk for recordings (AAC
+          # audio copied).
           hwaccel_args: preset-vaapi
-          input_args: preset-rtsp-tcp
+          input_args: preset-rtsp-generic
           output_args:
             record: preset-record-generic-audio-copy
           inputs:
