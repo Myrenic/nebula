@@ -10,6 +10,7 @@ resources:
   - ./comet.yaml
   - ./coder.yaml
   - ./flux-operator.yaml
+  - ./frigate.yaml
   - ./grafana.yaml
   - ./hermes-agent.yaml
   - ./homeassistant.yaml

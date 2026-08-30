@@ -6,6 +6,7 @@ resources:
   - aiomanager
   - aiometadata
   - comet
+  - frigate
   - knightcrawler
   - mediaflow-proxy
   - mediafusion

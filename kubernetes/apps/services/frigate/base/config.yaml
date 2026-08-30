@@ -1,0 +1,47 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: frigate-config
+data:
+  config.yml: |
+    mqtt:
+      enabled: false
+
+    detectors:
+      cpu:
+        type: cpu
+        num_threads: 2
+
+    # Intel iGPU hardware decoding. The container gets LIBVA_DRIVER_NAME=iHD;
+    # preset-vaapi auto-selects H.264/H.265 profiles on /dev/dri/renderD128.
+    ffmpeg:
+      hwaccel_args: preset-vaapi
+
+    record:
+      enabled: true
+      retain:
+        days: 3
+        mode: motion
+      alerts:
+        retain:
+          days: 14
+      detections:
+        retain:
+          days: 7
+
+    snapshots:
+      enabled: true
+      retain:
+        default: 7
+
+    cameras: {}
+    # Add RTSP cameras here, e.g.:
+    # cameras:
+    #   front:
+    #     enabled: true
+    #     ffmpeg:
+    #       inputs:
+    #         - path: rtsp://user:pass@camera-ip:554/stream1
+    #           roles:
+    #             - detect
+    #             - record
