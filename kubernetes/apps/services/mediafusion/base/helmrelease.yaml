@@ -68,6 +68,7 @@ spec:
             env:
               POSTGRES_URI: "postgresql://mediafusion:mediafusion@mediafusion-postgres:5432/mediafusion"
               REDIS_URL: "redis://mediafusion-redis:6379"
+              SECRET_KEY: "${MEDIAFUSION_SECRET_KEY}"
               TZ: "${TZ}"
             resources:
               requests:

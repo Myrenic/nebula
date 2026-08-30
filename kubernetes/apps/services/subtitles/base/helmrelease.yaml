@@ -57,6 +57,11 @@ spec:
         type: emptyDir
         globalMounts:
           - path: /app/instance
+      uploads:
+        # Same for /app/uploads (writable scratch, recreated on restart).
+        type: emptyDir
+        globalMounts:
+          - path: /app/uploads
       data:
         type: persistentVolumeClaim
         storageClass: longhorn
