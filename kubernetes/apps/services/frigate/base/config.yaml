@@ -33,9 +33,10 @@ data:
         enabled: true
         ffmpeg:
           # Reolink stability: force RTSP over TCP (UDP causes dropped
-          # frames). Decode only the low-res H.264 sub stream on the iGPU
-          # (VAAPI); the HEVC main stream is stream-copied straight to disk
-          # for recordings (audio is AAC, so it is copied too).
+          # frames). VAAPI decodes on the iGPU; only the low-res H.264 sub
+          # stream is decoded for detection, the HEVC main stream is
+          # stream-copied straight to disk for recordings (AAC audio copied).
+          hwaccel_args: preset-vaapi
           input_args: preset-rtsp-tcp
           output_args:
             record: preset-record-generic-audio-copy
@@ -44,7 +45,6 @@ data:
               roles: [record]
             - path: "${CAMERA_RTSP_SUB}"
               roles: [detect]
-              hwaccel_args: preset-vaapi
         detect:
           # Explicit resolution avoids the 0.17 startup auto-probe, which
           # hangs on Reolink RTSP streams (documented breaking change).
