@@ -24,7 +24,7 @@ data:
           height: 300
           input_tensor: nhwc
           input_pixel_format: bgr
-          labelmap_path: /labelmap/coco_91cl_bkgr.txt
+          labelmap_path: /openvino-model/coco_91cl_bkgr.txt
 
     cameras:
       reolink:
