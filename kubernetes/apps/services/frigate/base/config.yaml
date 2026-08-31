@@ -33,6 +33,8 @@ data:
 
     face_recognition:
       enabled: true
+      # Large embeddings model - affordable with the iGPU handling inference.
+      model_size: large
 
     semantic_search:
       enabled: true
