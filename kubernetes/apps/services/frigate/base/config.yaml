@@ -53,21 +53,21 @@ data:
         enabled: true
         ffmpeg:
           # preset-rtsp-restream is the documented input preset for localhost
-          # restreams; VAAPI decodes the detect stream on the iGPU and the
-          # HEVC main stream is stream-copied (AAC audio copied) to disk.
+          # restreams; VAAPI decodes the 4K main stream on the iGPU for
+          # detection (faces are recognition-grade there, the 640x360 sub
+          # stream only yields ~15px faces) and recordings are stream-copied
+          # (AAC audio copied) to disk.
           hwaccel_args: preset-vaapi
           input_args: preset-rtsp-restream
           output_args:
             record: preset-record-generic-audio-copy
           inputs:
             - path: rtsp://127.0.0.1:8556/frontdoor/stream_main
-              roles: [record]
-            - path: rtsp://127.0.0.1:8556/frontdoor/stream_sub
-              roles: [detect]
+              roles: [record, detect]
         detect:
           enabled: true
-          width: 640
-          height: 360
+          width: 3840
+          height: 2160
           fps: 5
         objects:
           track: [person]
