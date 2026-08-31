@@ -28,42 +28,60 @@ data:
       input_pixel_format: bgr
       labelmap_path: /openvino-model/coco_91cl_bkgr.txt
 
+    face_recognition:
+      enabled: true
+
+    semantic_search:
+      enabled: true
+
+    # The reolinkproxy sidecar (same pod) re-serves the camera over stable
+    # local RTSP; the camera itself is only contacted by the proxy.
+    go2rtc:
+      streams:
+        frontdoor:
+          - rtsp://127.0.0.1:8556/frontdoor/stream_sub
+        frontdoor_main:
+          - rtsp://127.0.0.1:8556/frontdoor/stream_main
+
     cameras:
-      reolink:
+      frontdoor:
         enabled: true
         ffmpeg:
-          # Reolink stability: preset-rtsp-generic forces RTSP over TCP (UDP
-          # causes dropped frames). VAAPI decodes on the iGPU; only the
-          # low-res H.264 sub stream is decoded for detection, the HEVC main
-          # stream is stream-copied straight to disk for recordings (AAC
-          # audio copied).
+          # preset-rtsp-restream is the documented input preset for localhost
+          # restreams; VAAPI decodes the detect stream on the iGPU and the
+          # HEVC main stream is stream-copied (AAC audio copied) to disk.
           hwaccel_args: preset-vaapi
-          input_args: preset-rtsp-generic
+          input_args: preset-rtsp-restream
           output_args:
             record: preset-record-generic-audio-copy
           inputs:
-            - path: "${CAMERA_RTSP_MAIN}"
+            - path: rtsp://127.0.0.1:8556/frontdoor/stream_main
               roles: [record]
-            - path: "${CAMERA_RTSP_SUB}"
+            - path: rtsp://127.0.0.1:8556/frontdoor/stream_sub
               roles: [detect]
         detect:
           enabled: true
-          # Explicit resolution avoids the 0.17 startup auto-probe, which
-          # hangs on Reolink RTSP streams (documented breaking change).
           width: 640
           height: 360
           fps: 5
-
-    # 0.17 tiered recording retention: continuous recording stays disabled
-    # (default); only alert/detection events are kept.
-    record:
-      enabled: true
-      alerts:
-        retain:
-          days: 14
-      detections:
-        retain:
-          days: 7
+        objects:
+          track: [person]
+        record:
+          enabled: true
+          alerts:
+            retain:
+              days: 14
+            pre_capture: 5
+            post_capture: 5
+          detections:
+            retain:
+              days: 7
+            pre_capture: 5
+            post_capture: 5
+          continuous:
+            days: 0
+          motion:
+            days: 7
 
     snapshots:
       enabled: true

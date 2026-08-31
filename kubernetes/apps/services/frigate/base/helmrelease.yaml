@@ -34,6 +34,37 @@ spec:
               # Frigate needs device access (iGPU render node) and privileged
               # helper processes; the official docs recommend privileged.
               privileged: true
+          reolinkproxy:
+            # Translates Reolink's proprietary Baichuan protocol (TCP 9000)
+            # into stable RTSP - the camera's own RTSP server is flaky with
+            # concurrent clients. RTSP on :8556 (frigate's go2rtc already
+            # binds 8554/8555 in the pod).
+            image:
+              repository: ghcr.io/shareed2k/reolinkproxy
+              tag: latest
+            env:
+              REOLINK_CAMERA_0_NAME: frontdoor
+              REOLINK_CAMERA_0_HOST: 10.0.50.209
+              REOLINK_CAMERA_0_USERNAME: "${CAMERA_ADMIN_USERNAME}"
+              REOLINK_CAMERA_0_PASSWORD: "${CAMERA_ADMIN_PASSWORD}"
+              REOLINK_CAMERA_0_STREAM: main,sub
+              REOLINK_CAMERA_0_CHANNEL: "0"
+              REOLINK_CAMERA_0_IDLE_DISCONNECT: "true"
+              REOLINK_CAMERA_0_IDLE_TIMEOUT: "30s"
+              REOLINK_SERVER_RTSP_ADDRESS: ":8556"
+            resources:
+              requests:
+                cpu: 20m
+                memory: 64Mi
+              limits:
+                memory: 256Mi
+            livenessProbe:
+              exec:
+                command: ["/usr/local/bin/reolinkproxy", "healthcheck"]
+              initialDelaySeconds: 30
+              periodSeconds: 30
+              timeoutSeconds: 15
+              failureThreshold: 3
     defaultPodOptions:
       securityContext:
         seccompProfile:
