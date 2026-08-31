@@ -17,7 +17,7 @@ spec:
           app:
             image:
               repository: gabisonfire/knightcrawler-migrator
-              tag: "2.0.26"
+              tag: "v2.0.28"
             env:
               TZ: "${TZ}"
               DEBUG_MODE: "false"
