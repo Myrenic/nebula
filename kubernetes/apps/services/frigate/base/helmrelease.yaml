@@ -29,7 +29,10 @@ spec:
                 cpu: 250m
                 memory: 512Mi
               limits:
-                memory: 2Gi
+                # iGPU VRAM is shared system RAM; detector + enrichments
+                # (YOLO-NAS, large face model, semantic search) + go2rtc all
+                # allocate there. 2Gi OOM-killed the container.
+                memory: 6Gi
             securityContext:
               # Frigate needs device access (iGPU render node) and privileged
               # helper processes; the official docs recommend privileged.
