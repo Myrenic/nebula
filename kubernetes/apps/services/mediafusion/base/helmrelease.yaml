@@ -14,7 +14,7 @@ spec:
           app:
             image:
               repository: mhdzumair/mediafusion
-              tag: "6.1.3"
+              tag: "6.1.5"
             env:
               HOST_URL: "https://mediafusion.${SECRET_DOMAIN_0}"
               POSTER_HOST_URL: "https://mediafusion.${SECRET_DOMAIN_0}"
@@ -62,7 +62,7 @@ spec:
           app:
             image:
               repository: mhdzumair/mediafusion
-              tag: "6.1.3"
+              tag: "6.1.5"
             args:
               - "/usr/local/bin/mediafusion-worker"
             env:
