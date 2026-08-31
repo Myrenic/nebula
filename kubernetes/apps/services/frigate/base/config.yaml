@@ -47,6 +47,7 @@ data:
             - path: "${CAMERA_RTSP_SUB}"
               roles: [detect]
         detect:
+          enabled: true
           # Explicit resolution avoids the 0.17 startup auto-probe, which
           # hangs on Reolink RTSP streams (documented breaking change).
           width: 640
