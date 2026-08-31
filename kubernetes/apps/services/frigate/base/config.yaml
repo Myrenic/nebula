@@ -53,11 +53,10 @@ data:
         enabled: true
         ffmpeg:
           # preset-rtsp-restream is the documented input preset for localhost
-          # restreams; VAAPI decodes the 4K main stream on the iGPU for
-          # detection (faces are recognition-grade there, the 640x360 sub
-          # stream only yields ~15px faces) and recordings are stream-copied
-          # (AAC audio copied) to disk.
-          hwaccel_args: preset-vaapi
+          # restreams. QSV decodes the 4K HEVC main stream on the iGPU -
+          # VAAPI crashes on this stream in the passthrough VM ("Failed to
+          # sync surface" every ~40s); recordings stay stream-copied.
+          hwaccel_args: preset-intel-qsv-h265
           input_args: preset-rtsp-restream
           output_args:
             record: preset-record-generic-audio-copy
