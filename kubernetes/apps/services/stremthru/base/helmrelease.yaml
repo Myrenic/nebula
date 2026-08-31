@@ -14,7 +14,7 @@ spec:
           app:
             image:
               repository: ghcr.io/muniftanjim/stremthru
-              tag: 0.101.2
+              tag: 0.104.0
             envFrom:
               - secretRef:
                   name: stremthru-secret
