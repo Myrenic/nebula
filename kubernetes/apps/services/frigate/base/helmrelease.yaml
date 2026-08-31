@@ -58,19 +58,19 @@ spec:
                 memory: 64Mi
               limits:
                 memory: 256Mi
-        probes:
-          liveness:
-            enabled: true
-            custom: true
-            spec:
-              exec:
-                command:
-                  - /usr/local/bin/reolinkproxy
-                  - healthcheck
-              initialDelaySeconds: 30
-              periodSeconds: 30
-              timeoutSeconds: 15
-              failureThreshold: 3
+            probes:
+              liveness:
+                enabled: true
+                custom: true
+                spec:
+                  exec:
+                    command:
+                      - /usr/local/bin/reolinkproxy
+                      - healthcheck
+                  initialDelaySeconds: 30
+                  periodSeconds: 30
+                  timeoutSeconds: 15
+                  failureThreshold: 3
     defaultPodOptions:
       securityContext:
         seccompProfile:
