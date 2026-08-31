@@ -50,7 +50,7 @@ spec:
               REOLINK_CAMERA_0_HOST: 10.0.50.209
               REOLINK_CAMERA_0_USERNAME: "${CAMERA_ADMIN_USERNAME}"
               REOLINK_CAMERA_0_PASSWORD: "${CAMERA_ADMIN_PASSWORD}"
-              REOLINK_CAMERA_0_STREAM: main,sub
+              REOLINK_CAMERA_0_STREAM: main,sub,extern
               REOLINK_CAMERA_0_CHANNEL: "0"
               REOLINK_CAMERA_0_IDLE_DISCONNECT: "true"
               REOLINK_CAMERA_0_IDLE_TIMEOUT: "30s"
