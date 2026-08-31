@@ -21,12 +21,15 @@ data:
         device: GPU
 
     model:
-      path: /openvino-model/ssdlite_mobilenet_v2.xml
-      width: 300
-      height: 300
-      input_tensor: nhwc
+      # YOLO-NAS-S 320x320 exported for frigate (FLAT predictions, uint8 BGR
+      # input); more reliable detections than the bundled SSD MobileNet v2.
+      model_type: yolonas
+      path: /config/model_cache/yolo_nas_s_320.onnx
+      width: 320
+      height: 320
+      input_tensor: nchw
       input_pixel_format: bgr
-      labelmap_path: /openvino-model/coco_91cl_bkgr.txt
+      labelmap_path: /labelmap/coco-80.txt
 
     face_recognition:
       enabled: true
