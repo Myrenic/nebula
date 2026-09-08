@@ -5,6 +5,7 @@ resources:
   - aiostreams
   - aiomanager
   - aiometadata
+  - chacdn
   - comet
   - frigate
   - knightcrawler
