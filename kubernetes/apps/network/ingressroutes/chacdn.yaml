@@ -8,13 +8,12 @@ spec:
   entryPoints:
     - websecure
   routes:
-    # Control channel for the SPA -> kubectl-proxy sidecar. LAN-only since it
-    # can roll workspace pods.
+    # Control channel for the SPA -> kubectl-proxy sidecar. No ipAllowList:
+    # apps.tuntelder.com resolves to a public IP, so LAN ranges would 403 the
+    # user's browser. Surface is RBAC-scoped (deployments get/patch only);
+    # auth should wrap the whole app + this route later.
     - match: Host(`apps.${SECRET_DOMAIN_0}`) && PathPrefix(`/api`)
       kind: Rule
-      middlewares:
-        - name: lan-only
-          namespace: network
       services:
         - name: chacdn-webui
           namespace: services
