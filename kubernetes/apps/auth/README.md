@@ -26,9 +26,11 @@ kubectl -n auth create secret generic keycloak-webui-oauth \
 ### Adding users / assigning apps
 
 1. Create users in the Keycloak admin console (realm `chacdn`).
-2. Grant access by email: add the user's email to the `users` array of the
-   entry in `chacdn/webui/public/catalog.json` (entry without `users` = visible
-   to everyone logged in).
+2. Create/assign **groups** in Keycloak matching the `groups` array of the
+   entry in `chacdn/webui/public/catalog.json` (entry without `groups` =
+   visible to everyone logged in). The group names in Keycloak and the catalog
+   must match; the SPA reads them from the token's `groups` claim via
+   oauth2-proxy (`X-Auth-Request-Groups`).
 3. Rebuild the webui (`npm run build` in `chacdn/webui`), commit, Flux applies.
 
 Each user gets their own workspace pods (`ws-<entry>-<user-slug>`), which are

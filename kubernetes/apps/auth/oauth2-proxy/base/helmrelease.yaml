@@ -41,6 +41,7 @@ spec:
       provider: oidc
       oidc-issuer-url: "https://keycloak.${SECRET_DOMAIN_0}/realms/chacdn"
       oidc-email-claim: "email"
+      oidc-groups-claim: "groups"
       redirect-url: "https://auth.${SECRET_DOMAIN_0}/oauth2/callback"
       cookie-domain: ".${SECRET_DOMAIN_0}"
       whitelist-domain: ".${SECRET_DOMAIN_0}"
