@@ -1,0 +1,52 @@
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: keycloak-postgres
+spec:
+  interval: 1h
+  chartRef:
+    kind: OCIRepository
+    name: keycloak
+  install:
+    remediation:
+      retries: 3
+  upgrade:
+    remediation:
+      retries: 3
+  values:
+    controllers:
+      keycloak-postgres:
+        containers:
+          app:
+            image:
+              repository: postgres
+              tag: 18-alpine
+            env:
+              POSTGRES_USER: keycloak
+              POSTGRES_DB: keycloak
+              POSTGRES_PASSWORD: "${KEYCLOAK_DB_PASSWORD}"
+              TZ: "${TZ}"
+            resources:
+              requests:
+                cpu: 100m
+                memory: 256Mi
+              limits:
+                memory: 1Gi
+    defaultPodOptions:
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
+    service:
+      postgres:
+        controller: keycloak-postgres
+        ports:
+          postgres:
+            port: 5432
+    persistence:
+      data:
+        type: persistentVolumeClaim
+        storageClass: longhorn
+        accessMode: ReadWriteOnce
+        size: 10Gi
+        globalMounts:
+          - path: /var/lib/postgresql

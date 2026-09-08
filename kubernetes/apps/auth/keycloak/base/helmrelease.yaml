@@ -1,0 +1,98 @@
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: keycloak
+spec:
+  interval: 1h
+  dependsOn:
+    - name: keycloak-postgres
+  chartRef:
+    kind: OCIRepository
+    name: keycloak
+  install:
+    remediation:
+      retries: 3
+  upgrade:
+    remediation:
+      retries: 3
+  values:
+    controllers:
+      keycloak:
+        containers:
+          app:
+            image:
+              repository: quay.io/keycloak/keycloak
+              tag: 26.7.3
+            args:
+              - start
+            env:
+              KC_DB: postgres
+              KC_DB_URL: jdbc:postgresql://keycloak-postgres:5432/keycloak
+              KC_DB_USERNAME: keycloak
+              KC_DB_PASSWORD: "${KEYCLOAK_DB_PASSWORD}"
+              KC_BOOTSTRAP_ADMIN_USERNAME: "${KEYCLOAK_ADMIN_USERNAME}"
+              KC_BOOTSTRAP_ADMIN_PASSWORD: "${KEYCLOAK_ADMIN_PASSWORD}"
+              KC_HOSTNAME: "https://keycloak.${SECRET_DOMAIN_0}"
+              KC_HOSTNAME_STRICT: "true"
+              KC_PROXY_HEADERS: xforwarded
+              KC_HTTP_ENABLED: "true"
+              KC_HEALTH_ENABLED: "true"
+              KC_HTTP_MANAGEMENT_HEALTH_ENABLED: "true"
+              KC_HTTP_MANAGEMENT_SCHEME: http
+              TZ: "${TZ}"
+            resources:
+              requests:
+                cpu: 250m
+                memory: 768Mi
+              limits:
+                memory: 2Gi
+            securityContext:
+              runAsNonRoot: true
+              allowPrivilegeEscalation: false
+              capabilities:
+                drop: ["ALL"]
+            probes:
+              startup:
+                enabled: true
+                custom: true
+                spec:
+                  httpGet:
+                    path: /health/started
+                    port: 9000
+                  periodSeconds: 5
+                  timeoutSeconds: 2
+                  failureThreshold: 60
+              readiness:
+                enabled: true
+                custom: true
+                spec:
+                  httpGet:
+                    path: /health/ready
+                    port: 9000
+                  periodSeconds: 10
+                  timeoutSeconds: 2
+                  failureThreshold: 6
+              liveness:
+                enabled: true
+                custom: true
+                spec:
+                  httpGet:
+                    path: /health/live
+                    port: 9000
+                  periodSeconds: 10
+                  timeoutSeconds: 2
+                  failureThreshold: 3
+    defaultPodOptions:
+      securityContext:
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        fsGroupChangePolicy: OnRootMismatch
+        seccompProfile:
+          type: RuntimeDefault
+    service:
+      app:
+        controller: keycloak
+        ports:
+          http:
+            port: 8080

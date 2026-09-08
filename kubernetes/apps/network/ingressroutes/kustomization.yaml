@@ -16,6 +16,7 @@ resources:
   - ./hermes-agent.yaml
   - ./homeassistant.yaml
   - ./homeassistant-k8s.yaml
+  - ./keycloak.yaml
   - ./knightcrawler.yaml
   - ./longhorn.yaml
   - ./mediaflow-proxy.yaml
