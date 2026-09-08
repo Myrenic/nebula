@@ -10,6 +10,7 @@ resources:
   - ./chacdn.yaml
   - ./comet.yaml
   - ./coder.yaml
+  - ./control.yaml
   - ./flux-operator.yaml
   - ./frigate.yaml
   - ./grafana.yaml
