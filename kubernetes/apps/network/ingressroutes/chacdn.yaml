@@ -8,6 +8,17 @@ spec:
   entryPoints:
     - websecure
   routes:
+    # Control channel for the SPA -> kubectl-proxy sidecar. LAN-only since it
+    # can roll workspace pods.
+    - match: Host(`apps.${SECRET_DOMAIN_0}`) && PathPrefix(`/api`)
+      kind: Rule
+      middlewares:
+        - name: lan-only
+          namespace: network
+      services:
+        - name: chacdn-webui
+          namespace: services
+          port: api
     - match: Host(`apps.${SECRET_DOMAIN_0}`)
       kind: Rule
       services:
