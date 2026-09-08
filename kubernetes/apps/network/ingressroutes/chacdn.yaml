@@ -47,24 +47,6 @@ spec:
   tls:
     secretName: domain-0-prod-tls
 ---
-apiVersion: traefik.io/v1alpha1
-kind: IngressRoute
-metadata:
-  name: desktop-fedora
-  namespace: network
-spec:
-  entryPoints:
-    - websecure
-  routes:
-    - match: Host(`desktop-fedora.${SECRET_DOMAIN_0}`)
-      kind: Rule
-      services:
-        - name: desktop-fedora
-          namespace: services
-          port: 3000
-  tls:
-    secretName: domain-0-prod-tls
----
 # Single-app Selkies containers
 apiVersion: traefik.io/v1alpha1
 kind: IngressRoute
