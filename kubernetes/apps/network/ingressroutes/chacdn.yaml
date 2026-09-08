@@ -8,60 +8,24 @@ spec:
   entryPoints:
     - websecure
   routes:
-    # Control channel for the SPA -> kubectl-proxy sidecar. No ipAllowList:
-    # apps.tuntelder.com resolves to a public IP, so LAN ranges would 403 the
-    # user's browser. Surface is RBAC-scoped (deployments get/patch only);
-    # auth should wrap the whole app + this route later.
+    # Control channel for the SPA -> kubectl-proxy sidecar.
     - match: Host(`apps.${SECRET_DOMAIN_0}`) && PathPrefix(`/api`)
       kind: Rule
+      middlewares:
+        - name: oauth2-proxy-auth
+          namespace: network
       services:
         - name: chacdn-webui
           namespace: services
           port: api
     - match: Host(`apps.${SECRET_DOMAIN_0}`)
       kind: Rule
+      middlewares:
+        - name: oauth2-proxy-auth
+          namespace: network
       services:
         - name: chacdn-webui
           namespace: services
           port: 80
-  tls:
-    secretName: domain-0-prod-tls
----
-# Example Selkies desktops. Traefik proxies HTTP port 3000 and passes through
-# the /websocket stream upgrade used by the Selkies client.
-apiVersion: traefik.io/v1alpha1
-kind: IngressRoute
-metadata:
-  name: desktop-ubuntu
-  namespace: network
-spec:
-  entryPoints:
-    - websecure
-  routes:
-    - match: Host(`desktop-ubuntu.${SECRET_DOMAIN_0}`)
-      kind: Rule
-      services:
-        - name: desktop-ubuntu
-          namespace: services
-          port: 3000
-  tls:
-    secretName: domain-0-prod-tls
----
-# Single-app Selkies containers
-apiVersion: traefik.io/v1alpha1
-kind: IngressRoute
-metadata:
-  name: firefox
-  namespace: network
-spec:
-  entryPoints:
-    - websecure
-  routes:
-    - match: Host(`firefox.${SECRET_DOMAIN_0}`)
-      kind: Rule
-      services:
-        - name: firefox
-          namespace: services
-          port: 3000
   tls:
     secretName: domain-0-prod-tls

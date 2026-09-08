@@ -33,13 +33,14 @@ spec:
     service:
       portNumber: 80
     config:
-      clientID: "${AZURE_CLIENT_ID}"
-      clientSecret: "${AZURE_CLIENT_SECRET}"
-      cookieSecret: "${OAUTH2_PROXY_COOKIE_SECRET}"
+      # Client id/secret/cookie-secret live in the out-of-band
+      # keycloak-webui-oauth Secret (created manually, like arc-github-auth),
+      # so they don't need to be in SOPS.
+      existingSecret: keycloak-webui-oauth
     extraArgs:
       provider: oidc
-      oidc-issuer-url: "https://login.microsoftonline.com/${AZURE_TENANT_ID}/v2.0"
-      oidc-email-claim: "preferred_username"
+      oidc-issuer-url: "https://keycloak.${SECRET_DOMAIN_0}/realms/chacdn"
+      oidc-email-claim: "email"
       redirect-url: "https://auth.${SECRET_DOMAIN_0}/oauth2/callback"
       cookie-domain: ".${SECRET_DOMAIN_0}"
       whitelist-domain: ".${SECRET_DOMAIN_0}"
