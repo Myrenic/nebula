@@ -10,11 +10,6 @@ spec:
     developerConfiguration:
       featureGates: ["LiveMigration"]
     imagePullPolicy: IfNotPresent
-    # Single-node: no live migration possible
-    # PerpendicularLiveMigration is not needed
   customizeComponents: {}
   imagePullPolicy: IfNotPresent
-  workloadUpdateStrategy:
-    # Single-node: batch migration is pointless
-    batchMigrationCountdown: 0
-    batchSilentRollbackInterval: 0
+  workloadUpdateStrategy: {}
