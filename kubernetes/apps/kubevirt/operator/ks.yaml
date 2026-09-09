@@ -1,0 +1,37 @@
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: kubevirt-operator
+  namespace: flux-system
+spec:
+  targetNamespace: kubevirt
+  interval: 1h
+  retryInterval: 1m
+  timeout: 10m
+  prune: true
+  path: ./kubernetes/apps/kubevirt/operator/base
+  sourceRef:
+    kind: GitRepository
+    name: flux-system
+    namespace: flux-system
+  wait: true
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: kubevirt-cr
+  namespace: flux-system
+spec:
+  targetNamespace: kubevirt
+  interval: 1h
+  retryInterval: 1m
+  timeout: 5m
+  prune: true
+  path: ./kubernetes/apps/kubevirt/operator/cr
+  sourceRef:
+    kind: GitRepository
+    name: flux-system
+    namespace: flux-system
+  dependsOn:
+    - name: kubevirt-operator
+  wait: true

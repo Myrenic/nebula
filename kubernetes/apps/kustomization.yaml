@@ -6,6 +6,7 @@ resources:
   - cert-manager
   - network
   - storage
+  - kubevirt
   - backup
   - services
   - auth
