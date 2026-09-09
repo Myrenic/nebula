@@ -9,7 +9,6 @@ resources:
   - ./certificate.yaml
   - ./chacdn.yaml
   - ./comet.yaml
-  - ./coder.yaml
   - ./control.yaml
   - ./flux-operator.yaml
   - ./frigate.yaml
