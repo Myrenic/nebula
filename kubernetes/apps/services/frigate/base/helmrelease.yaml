@@ -75,6 +75,10 @@ spec:
                   timeoutSeconds: 15
                   failureThreshold: 3
     defaultPodOptions:
+      # Frigate needs an Intel iGPU for VA-API/QSV (LIBVA_DRIVER_NAME=iHD);
+      # AMD nodes have no /dev/dri render node it can use.
+      nodeSelector:
+        cpu-vendor.node.kubevirt.io/Intel: "true"
       securityContext:
         seccompProfile:
           type: RuntimeDefault
