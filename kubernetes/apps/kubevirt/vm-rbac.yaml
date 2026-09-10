@@ -1,0 +1,31 @@
+# RBAC for the workplace API to manage KubeVirt VMs and CDI DataVolumes
+# in the kubevirt namespace. Same SA as the workspace containers (chacdn-control).
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: chacdn-vm-control
+  namespace: kubevirt
+rules:
+  - apiGroups: ["kubevirt.io"]
+    resources: ["virtualmachines", "virtualmachineinstances"]
+    verbs: ["get", "list", "watch", "create", "patch", "delete"]
+  - apiGroups: ["cdi.kubevirt.io"]
+    resources: ["datavolumes"]
+    verbs: ["get", "list", "watch", "create", "delete"]
+  - apiGroups: [""]
+    resources: ["services"]
+    verbs: ["get", "list", "create", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: chacdn-vm-control
+  namespace: kubevirt
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: chacdn-vm-control
+subjects:
+  - kind: ServiceAccount
+    name: chacdn-control
+    namespace: services

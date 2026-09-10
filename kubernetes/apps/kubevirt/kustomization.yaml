@@ -6,3 +6,4 @@ resources:
   - ./operator/ks.yaml
   - ./cdi/ks.yaml
   - ./cdi/namespace.yaml
+  - ./vm-rbac.yaml
