@@ -3,19 +3,7 @@ kind: Kustomization
 resources:
   - ./namespace.yaml
   - aiostreams
-  - aiomanager
-  - aiometadata
   - chacdn
-  - comet
   - frigate
   - guacamole
-  - knightcrawler
-  - mediaflow-proxy
-  - mediafusion
-  - nzbdav
-  - prowlarr
-  - spottarr
-  - stremthru
-  - subtitles
   - uptime-kuma
-

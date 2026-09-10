@@ -20,5 +20,4 @@ spec:
         name: cluster-secrets
   dependsOn:
     - name: longhorn
-    - name: stremthru
   wait: false

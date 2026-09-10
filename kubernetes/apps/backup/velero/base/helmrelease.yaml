@@ -160,26 +160,6 @@ spec:
           labelSelector:
             matchLabels:
               app.kubernetes.io/name: aiostreams
-      stremthru-daily:
-        schedule: "10 3 * * *"  # 03:10 every day
-        template:
-          ttl: 168h0m0s         # 7 days
-          storageLocation: default
-          includedNamespaces:
-            - services
-          labelSelector:
-            matchLabels:
-              app.kubernetes.io/name: stremthru
-      stremthru-monthly:
-        schedule: "10 5 1 * *"  # 05:10 on the 1st of every month
-        template:
-          ttl: 1440h0m0s        # 60 days (~2 months)
-          storageLocation: default
-          includedNamespaces:
-            - services
-          labelSelector:
-            matchLabels:
-              app.kubernetes.io/name: stremthru
       # Home Assistant — config PVC backup (HA itself runs outside the cluster).
       homeassistant-daily:
         schedule: "20 3 * * *"
