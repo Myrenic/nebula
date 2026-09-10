@@ -44,6 +44,7 @@ spec:
       oidc-groups-claim: "groups"
       redirect-url: "https://auth.${SECRET_DOMAIN_0}/oauth2/callback"
       cookie-domain: ".${SECRET_DOMAIN_0}"
+      cookie-samesite: "none"
       whitelist-domain: ".${SECRET_DOMAIN_0}"
       set-xauthrequest: "true"
       reverse-proxy: "true"
