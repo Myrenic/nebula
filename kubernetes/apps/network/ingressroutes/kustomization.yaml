@@ -13,6 +13,7 @@ resources:
   - ./flux-operator.yaml
   - ./frigate.yaml
   - ./grafana.yaml
+  - ./guacamole.yaml
   - ./hermes-agent.yaml
   - ./homeassistant.yaml
   - ./homeassistant-k8s.yaml

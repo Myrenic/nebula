@@ -1,0 +1,80 @@
+---
+# Ubuntu VM with xfce4 + xrdp for Guacamole RDP proof.
+# Cloud-init installs the desktop + RDP server on first boot.
+apiVersion: kubevirt.io/v1
+kind: VirtualMachine
+metadata:
+  name: ubuntu-rdp
+  namespace: kubevirt
+  labels:
+    app.kubernetes.io/name: ubuntu-rdp
+    app.kubernetes.io/managed-by: flux
+spec:
+  runStrategy: Always
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: ubuntu-rdp
+    spec:
+      domain:
+        cpu:
+          cores: 2
+        memory:
+          guest: 2Gi
+        devices:
+          disks:
+            - name: rootdisk
+              disk:
+                bus: virtio
+            - name: cloudinit
+              disk:
+                bus: virtio
+          interfaces:
+            - name: default
+              masquerade: {}
+        machine:
+          type: q35
+      networks:
+        - name: default
+          pod: {}
+      terminationGracePeriodSeconds: 0
+      volumes:
+        - name: rootdisk
+          persistentVolumeClaim:
+            claimName: ubuntu-rdp
+        - name: cloudinit
+          cloudInitNoCloud:
+            userData: |
+              #cloud-config
+              package_update: true
+              packages:
+                - xfce4
+                - xrdp
+                - xfce4-terminal
+                - dbus-x11
+              users:
+                - default
+                - name: user
+                  plain_text_passwd: user
+                  lock_passwd: false
+                  shell: /bin/bash
+                  groups: sudo, ssl-cert
+              runcmd:
+                - echo "xfce4-session" > /home/user/.xsession
+                - chown user:user /home/user/.xsession
+                - systemctl enable xrdp
+                - systemctl enable xrdp-sesman
+  dataVolumeTemplates:
+    - metadata:
+        name: ubuntu-rdp
+      spec:
+        source:
+          http:
+            url: https://cloud-images.ubuntu.com/jammy/current/jammy-server-cloudimg-amd64.img
+        pvc:
+          accessModes:
+            - ReadWriteOnce
+          storageClassName: longhorn
+          resources:
+            requests:
+              storage: 10Gi

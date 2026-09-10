@@ -8,6 +8,7 @@ resources:
   - chacdn
   - comet
   - frigate
+  - guacamole
   - knightcrawler
   - mediaflow-proxy
   - mediafusion

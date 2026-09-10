@@ -1,0 +1,18 @@
+# Guacamole RDP gateway
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: guacamole
+  namespace: network
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    - match: Host(`rdp.${SECRET_DOMAIN_0}`)
+      kind: Rule
+      services:
+        - name: guacamole
+          namespace: guacamole
+          port: http
+  tls:
+    secretName: domain-0-prod-tls

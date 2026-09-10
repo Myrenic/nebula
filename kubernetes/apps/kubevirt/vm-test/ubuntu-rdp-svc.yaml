@@ -1,0 +1,17 @@
+---
+# ClusterIP Service that selects the virt-launcher pod for ubuntu-rdp.
+# Guacamole connects to this Service on port 3389 (RDP).
+apiVersion: v1
+kind: Service
+metadata:
+  name: ubuntu-rdp-svc
+  namespace: kubevirt
+  labels:
+    app.kubernetes.io/name: ubuntu-rdp
+spec:
+  selector:
+    kubevirt.io/domain: ubuntu-rdp
+  ports:
+    - name: rdp
+      port: 3389
+      targetPort: 3389

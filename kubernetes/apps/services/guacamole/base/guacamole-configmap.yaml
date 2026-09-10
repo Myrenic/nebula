@@ -1,0 +1,30 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: guacamole-config
+  namespace: guacamole
+  labels:
+    app.kubernetes.io/name: guacamole
+data:
+  # guacamole.properties — tells the webapp where guacd lives
+  guacamole.properties: |
+    guacd-hostname: guacd
+    guacd-port: 4822
+
+  # user-mapping.xml — static proof with hardcoded admin + one RDP connection.
+  # The connection points at the ubuntu-rdp VM's ClusterIP Service in kubevirt ns.
+  # In production this would be dynamically managed by the workplace API.
+  user-mapping.xml: |
+    <?xml version="1.0" encoding="UTF-8"?>
+    <user-mapping>
+        <authorize username="guacadmin" password="guacadmin">
+            <connection name="Ubuntu VM" protocol="rdp">
+                <param name="hostname">ubuntu-rdp-svc.kubevirt.svc.cluster.local</param>
+                <param name="port">3389</param>
+                <param name="username">user</param>
+                <param name="password">user</param>
+                <param name="security">nla</param>
+                <param name="ignore-cert">true</param>
+            </connection>
+        </authorize>
+    </user-mapping>
