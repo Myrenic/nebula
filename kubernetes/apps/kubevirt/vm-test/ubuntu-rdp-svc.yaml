@@ -10,7 +10,7 @@ metadata:
     app.kubernetes.io/name: ubuntu-rdp
 spec:
   selector:
-    kubevirt.io/domain: ubuntu-rdp
+    app.kubernetes.io/name: ubuntu-rdp
   ports:
     - name: rdp
       port: 3389
