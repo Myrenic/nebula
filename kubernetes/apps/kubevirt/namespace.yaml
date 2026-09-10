@@ -4,3 +4,9 @@ metadata:
   name: kubevirt
   labels:
     app.kubernetes.io/managed-by: flux
+    # KubeVirt requires privileged pods (virt-handler, virt-launcher). Must
+    # match operator.yaml's Namespace manifest or the stricter label here
+    # drifts the live namespace and pods get rejected by PodSecurity.
+    pod-security.kubernetes.io/enforce: privileged
+    pod-security.kubernetes.io/audit: privileged
+    pod-security.kubernetes.io/warn: privileged

@@ -8,16 +8,9 @@ spec:
   entryPoints:
     - websecure
   routes:
-    # Control channel for the SPA -> kubectl-proxy sidecar.
-    - match: Host(`apps.${SECRET_DOMAIN_0}`) && PathPrefix(`/api`)
-      kind: Rule
-      middlewares:
-        - name: oauth2-proxy-auth
-          namespace: network
-      services:
-        - name: chacdn-webui
-          namespace: services
-          port: api
+    # SPA + /api (nginx proxies /api/ to the workplace-api sidecar).
+    # Do not route /api to the kubectl-proxy port — that would expose the
+    # raw Kubernetes API.
     - match: Host(`apps.${SECRET_DOMAIN_0}`)
       kind: Rule
       middlewares:
