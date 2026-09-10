@@ -1,106 +1,60 @@
-# ChACDN migration findings
+# ChACDN findings log
 
 Snapshot: 2026-09-10, cluster `omni-talos-default-opencode`.
+Scope: `kubernetes/apps/services/chacdn`, `kubernetes/apps/kubevirt`,
+`kubernetes/apps/network/ingressroutes` (chacdn + control).
 
-Scope: the ChACDN workplace stack only (`kubernetes/apps/services/chacdn`,
-`kubernetes/apps/network/ingressroutes/chacdn.yaml`,
-`kubernetes/apps/network/ingressroutes/control.yaml`).
+## What works (verified 2026-09-10)
 
-## What works
+- `chacdn-webui` 3/3 Running; workplace API serves /api/health, /api/me,
+  /api/catalog, /api/workspaces (list/create/delete/restart).
+- Workspace creation: instant for containers (Deployment + Service +
+  IngressRoute) and VMs (Secret-cloudinit + VirtualMachine + DataVolume +
+  Service + IngressRoute).
+- Fresh VM self-configures: apt retry install of xfce4 + deps, Selkies
+  portable runtime, both systemd units up, cloud-init `done`; the workplace
+  API pod reaches Selkies through the kubevirt Service (`HTTP/1.1 200`)
+  with basic auth `user`/`mypasswd` behind oauth2-proxy.
 
-- `chacdn-webui` Deployment is `3/3` Running (`webui`, `workplace-api`, `kubectl-proxy`).
-- Workplace API responds: `/api/health` -> `{"ok":true}`, `/api/catalog` serves the
-  catalog. nginx proxies `/api/` to `127.0.0.1:3001`, so the SPA's `API = "/api"`
-  calls reach the API sidecar.
-- IngressRoute root route is loaded: `apps.tuntelder.com/` -> 401 from
-  `oauth2-proxy-auth` (expected when unauthenticated).
-- One workspace Deployment (`ws-ubuntu-desktop-u7d289613`) is Running on the
-  container runtime.
+## Resolved
 
-## Findings
+1. `kubeFetch` forwarded the full request headers to the kubectl-proxy — the
+   browser's stale `content-length` header made the proxied POST hang forever.
+   Fixed to forward only `x-auth-request-*`.
 
-### 1. IngressRoute `/api` route points at a service port that does not exist
+2. VM cloud-init: the `virtualmachine-validator` webhook rejects inline
+   `cloudInitNoCloud.userData` > 2048 bytes, so every VM create was silently
+   denied. User-data moved to a Secret (`cloudInitNoCloud.secretRef` — field
+   name is `secretRef`, not `userDataSecretRef`), created by the API flow; add
+   `secrets get/create/delete` to `chacdn-vm-control` Role.
 
-`kubernetes/apps/network/ingressroutes/chacdn.yaml:20` routes `PathPrefix(/api)`
-to `port: api`, but the `chacdn-webui` Service exposes only `http` (80) and
-`workplace` (3001) (`kubernetes/apps/services/chacdn/base/webui.yaml:133-139`).
-`api` is the container port name of the `kubectl-proxy` sidecar (8001), not a
-Service port.
+3. Selkies: pip package ships `selkies-gstreamer` (not `selkies`), and jammy's
+   gstreamer 1.20 lacks the `GstWebRTC-1.0` GIR binding → Namespace errors.
+   Cloud-init now installs the official portable runtime tarball (v1.6.2,
+   bundled gstreamer >= 1.22). Correct CLI: `selkies-gstreamer-run` with
+   underscore-style flags (`--enable_https`, not `--enable-https`).
 
-Evidence - Traefik logs on every reconcile:
+4. Heredocs inside cloud-init runcmd break (marker "not found"); unit files
+   are written with cloud-init `write_files` instead. cloud-init `packages:`
+   does not retry and one transient mirror hiccup (Hash Sum mismatch from
+   local HTTP cache) killed whole first boots — installs are in runcmd with
+   retries now.
 
-```
-ingress "chacdn-webui" namespace "network" error "service port not found: api"
-```
+5. kubevirt ns PodSecurity drift: `operator/base/operator.yaml` Namespace
+   dropped the pod-security label because the app-root `namespace.yaml`
+   overwrote the namespace without it. Both declare `enforce/audit/warn:
+   privileged` now; deleting the virt-handler DS lets the operator recreate
+   it once labels are right.
 
-Impact: low today, because nginx already proxies `/api/` to the workplace API on
-3001, so the broken Traefik router is shadowed by the port-80 route. It is dead
-config that spams Traefik errors. Do not point this route at the `kubectl-proxy`
-port - that would expose the raw Kubernetes API.
+6. `chacdn.yaml` dead `/api` route (`port: api` never existed) removed.
 
-Fix: delete the `/api` route (nginx handles it), or point it at `port: workplace`.
+7. idle-culler: shell `${...}` was eaten by Flux envsubst → literal empty
+   substitutions. Escaped as `$${...}` so Flux renders shell literals.
 
-### 2. `chacdn-idle-culler` is broken twice
+## Open
 
-File: `kubernetes/apps/services/chacdn/base/idle-culler.yaml`.
-
-a) Flux `postBuild` substitution consumes the shell `${...}` variables. The
-   deployed CronJob body contains literal empty substitutions:
-
-   ```
-   echo "Culling workspaces older than m (skipping persistent)"
-   echo "Skipping  (lifecycle=persistent, owner: )"
-   kubectl delete pvc "chacdn-home--" -n services --ignore-not-found
-   ```
-
-   `chacdn-home--` is missing `${entryId}-${owner}`, so disposable PVCs are never
-   deleted. Only the deployment/service/ingress deletion paths (which use `$name`
-   without braces) survive.
-
-   Fix: escape shell vars as `$${...}` (Flux renders `$${` as a literal `${`), or
-   move the script into a ConfigMap and keep substitution off it.
-
-b) The label selector `app.kubernetes.io/component=session` matches nothing today.
-   The existing `ws-ubuntu-desktop-u7d289613` Deployment only has
-   `app=ws-ubuntu-desktop-u7d289613` and `chacdn-owner=u7d289613`; it predates the
-   workplace API. The API does set `app.kubernetes.io/component=session`,
-   `chacdn-owner`, `chacdn-entry`, and `chacdn-lifecycle` on new workspaces
-   (`kubernetes/apps/services/chacdn/api/server.mjs:82-94`), so newly created
-   workspaces will be culled, but pre-existing ones will not.
-
-c) The CronJob was hitting `BackoffLimitExceeded` (job `chacdn-idle-culler-29817320`).
-   Jobs are pruned after `ttlSecondsAfterFinished: 300`, so the failure log is no
-   longer available; re-run and capture it before changing the script.
-
-### 3. ~~Debug logging in the workplace API~~ FIXED
-
-The debug `console.log` lines added while diagnosing the create hang were
-reverted. `server.mjs` is clean and the regenerated ConfigMap matches.
-
-### 4. Workspace create hangs: `kubeFetch` forwarded raw incoming headers
-
-FIXED. `kubeFetch` (in `api/server.mjs`) spread the full incoming `req.headers`
-into the fetch to the `kubectl-proxy` (localhost:8001). This passed the
-browser request's stale `content-length` (e.g. `30` for `{"catalogId":...}`)
-along to a POST/PATCH whose actual body was much larger (the workspace
-manifest), so the proxied fetch hung forever. Result: creating any workspace
-from the UI/API never returned and nothing was provisioned.
-
-Fix: `kubeFetch` now forwards only the `x-auth-request-*` identity headers, not
-raw transport headers. Verified end-to-end: container workspace creates to
-`running` and VM workspace creates (VM + Service + IngressRoute + DataVolume).
-
-## Not a ChACDN problem (context)
-
-- `velero-ui` is crashlooping (1546 restarts) because Velero's BSL is
-  `Unavailable`; `backups.${SECRET_DOMAIN_0}` will stay 503 until Velero is fixed.
-- Velero BSL failure and the corrupt `aiometadata-redis` / `stremthru` data are
-  tracked separately.
-
-## Suggested fixes (repo-only)
-
-1. `chacdn.yaml`: remove the `/api` route or set `port: workplace`.
-2. `idle-culler.yaml`: escape shell `${...}` as `$${...}`; consider dropping the
-   stale `component=session`-only assumption or backfilling labels.
-3. ~~Revert the `server.mjs` debug logging.~~ DONE.
-4. ~~Workspace create hang.~~ DONE (`kubeFetch` header leak, finding 4).
+- idle-culler ignores VM workspaces (VirtualMachines in kubevirt ns).
+- Pre-API workspace `ws-ubuntu-desktop-u7d289613` lacks culler labels; it is
+  40h+ old and never flagged. Recycle it manually or backfill labels.
+- Not ChACDN: `velero-ui` crashlooping (BSL Unavailable) — `backups.` host
+  stays 503; corrupt `aiometadata-redis` / `stremthru` data tracked separately.
