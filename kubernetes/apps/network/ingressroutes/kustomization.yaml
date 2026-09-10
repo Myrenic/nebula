@@ -20,6 +20,7 @@ resources:
   - ./nexus.yaml
   - ./obsidiansync.yaml
   - ./oauth2-proxy.yaml
+  - ./spottarr.yaml
   - ./traefik.yaml
   - ./uptime-kuma.yaml
   - ./velero-ui.yaml

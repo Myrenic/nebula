@@ -6,4 +6,5 @@ resources:
   - chacdn
   - frigate
   - guacamole
+  - spottarr
   - uptime-kuma

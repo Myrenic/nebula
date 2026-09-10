@@ -1,0 +1,61 @@
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: spottarr
+spec:
+  interval: 1h
+  chartRef:
+    kind: OCIRepository
+    name: spottarr
+  values:
+    controllers:
+      spottarr:
+        containers:
+          app:
+            image:
+              repository: ghcr.io/spottarr/spottarr
+              tag: latest
+            env:
+              USENET__HOSTNAME: "nl.newsdemon.com"
+              USENET__USERNAME: "${SPOTTARR_USENET_USERNAME}"
+              USENET__PASSWORD: "${SPOTTARR_USENET_PASSWORD}"
+              USENET__PORT: "563"
+              USENET__USETLS: "true"
+              USENET__MAXCONNECTIONS: "10"
+              SPOTNET__RETRIEVEAFTER: "2024-10-01T00:00:00Z"
+              SPOTNET__IMPORTBATCHSIZE: "10000"
+              SPOTNET__RETENTIONDAYS: "365"
+              SPOTNET__IMPORTADULTCONTENT: "true"
+              TZ: "${TZ}"
+            resources:
+              requests:
+                cpu: 50m
+                memory: 128Mi
+              limits:
+                memory: 512Mi
+            securityContext:
+              runAsNonRoot: true
+              allowPrivilegeEscalation: false
+              capabilities:
+                drop: ["ALL"]
+    defaultPodOptions:
+      securityContext:
+        runAsUser: 1654
+        runAsGroup: 1654
+        fsGroup: 1654
+        fsGroupChangePolicy: OnRootMismatch
+        seccompProfile:
+          type: RuntimeDefault
+    service:
+      app:
+        ports:
+          http:
+            port: 8383
+    persistence:
+      data:
+        type: persistentVolumeClaim
+        storageClass: longhorn
+        accessMode: ReadWriteOnce
+        size: 10Gi
+        globalMounts:
+          - path: /data
