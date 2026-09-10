@@ -26,6 +26,8 @@ spec:
               BASE_URL: "https://aiostreams.${SECRET_DOMAIN_0}"
               SECRET_KEY: "${AIOSTREAM_SECRET_KEY}"
               ADDON_PASSWORD: "${AIOSTREAM_ADDON_PASSWORD}"
+              AIOSTREAMS_AUTH: "${AIOSTREAMS_AUTH}"
+              AIOSTREAMS_AUTH_REQUIRED: "true"
               DATABASE_URI: "sqlite://./data/db.sqlite"
               LOG_LEVEL: "http"
             resources:
