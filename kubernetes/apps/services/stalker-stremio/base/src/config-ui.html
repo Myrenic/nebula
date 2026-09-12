@@ -1,0 +1,428 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Stalker &rarr; Stremio</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #0f1115;
+        --panel: #171a21;
+        --border: #2a2f3a;
+        --text: #e6e9ef;
+        --muted: #98a2b3;
+        --accent: #7c5cff;
+        --ok: #2ecc71;
+        --err: #ff5c5c;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        padding: 2rem 1rem 4rem;
+        background: var(--bg);
+        color: var(--text);
+        font: 15px/1.5 system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+      }
+      main { max-width: 760px; margin: 0 auto; }
+      h1 { font-size: 1.4rem; margin: 0 0 0.25rem; }
+      h3 { font-size: 0.95rem; margin: 1rem 0 0.4rem; }
+      p.sub { color: var(--muted); margin: 0 0 1.5rem; }
+      form, .card {
+        background: var(--panel);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 1.25rem;
+      }
+      form { display: grid; gap: 0.9rem; }
+      label.field { display: grid; gap: 0.35rem; font-size: 0.85rem; color: var(--muted); }
+      input[type='text'], input[type='url'], input:not([type]), select {
+        width: 100%;
+        padding: 0.6rem 0.7rem;
+        border-radius: 8px;
+        border: 1px solid var(--border);
+        background: #0c0e12;
+        color: var(--text);
+        font-size: 0.95rem;
+      }
+      details { border-top: 1px solid var(--border); padding-top: 0.75rem; }
+      summary { cursor: pointer; color: var(--muted); font-size: 0.85rem; margin-bottom: 0.6rem; }
+      details label.field { margin-bottom: 0.7rem; }
+      .row { display: flex; gap: 0.6rem; flex-wrap: wrap; }
+      button {
+        padding: 0.65rem 1rem;
+        border-radius: 8px;
+        border: 1px solid var(--border);
+        background: #20242e;
+        color: var(--text);
+        font-size: 0.95rem;
+        cursor: pointer;
+      }
+      button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+      button:disabled { opacity: 0.5; cursor: default; }
+      button.tiny { padding: 0.15rem 0.5rem; font-size: 0.75rem; }
+      #status { min-height: 1.2rem; font-size: 0.9rem; }
+      #status.ok { color: var(--ok); }
+      #status.err { color: var(--err); }
+      #picker, #result { display: none; margin-top: 1.25rem; }
+      .scroll {
+        max-height: 280px;
+        overflow: auto;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 0.4rem 0.6rem;
+        background: #0c0e12;
+      }
+      .item { display: flex; gap: 0.55rem; align-items: center; padding: 0.15rem 0; font-size: 0.88rem; }
+      .item label { display: flex; gap: 0.55rem; align-items: center; flex: 1; cursor: pointer; }
+      .item input { width: auto; }
+      .muted { color: var(--muted); font-size: 0.82rem; }
+      #summary { font-size: 0.95rem; }
+      #summary strong { color: var(--accent); }
+      #manifest { word-break: break-all; font-family: ui-monospace, monospace; font-size: 0.8rem; color: var(--muted); }
+      .hint { color: var(--muted); font-size: 0.8rem; margin-top: 1rem; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Stalker &rarr; Stremio</h1>
+      <p class="sub">Turn your Stalker portal into a Stremio live TV addon.</p>
+
+      <form id="form">
+        <label class="field">
+          Portal URL
+          <input id="portalUrl" placeholder="http://host:port/c/ or http://host/portal.php" />
+        </label>
+        <label class="field">
+          MAC address
+          <input id="mac" placeholder="00:1A:79:AA:BB:CC" />
+        </label>
+        <label class="field">
+          Timezone (optional)
+          <input id="timezone" placeholder="Europe/Amsterdam" />
+        </label>
+        <label class="field">
+          Addon name (optional)
+          <input id="name" placeholder="Stalker Portal" />
+        </label>
+        <label class="field">
+          Playback route
+          <select id="streamRoute">
+            <option value="direct">Direct from portal — most like their box</option>
+            <option value="proxy">Via this addon — use if you get proxy/407 errors</option>
+          </select>
+        </label>
+
+        <details>
+          <summary>Device fingerprint (optional &mdash; match your provider's box)</summary>
+          <label class="field">
+            Serial
+            <input id="serial" placeholder="leave blank to derive from MAC" />
+          </label>
+          <label class="field">
+            Device ID
+            <input id="deviceId" placeholder="leave blank to derive from MAC" />
+          </label>
+          <label class="field">
+            User-Agent override
+            <input id="userAgent" placeholder="leave blank for the MAG200 default" />
+          </label>
+        </details>
+
+        <div class="row">
+          <button type="button" id="load">Load channels</button>
+          <button type="button" id="test">Test connection</button>
+          <button type="submit" class="primary" id="generate">Generate manifest</button>
+        </div>
+        <div id="status"></div>
+      </form>
+
+      <div id="picker" class="card">
+        <div id="summary"></div>
+
+        <h3>Genres <span class="muted">— tick one to include the whole category</span></h3>
+        <input id="genreSearch" placeholder="Filter genres… (e.g. NL |)" />
+        <div id="genreList" class="scroll"></div>
+        <div class="row" style="margin-top: 0.5rem">
+          <button type="button" id="selectGenres">Select all shown genres</button>
+          <button type="button" id="clearSelection">Clear selection</button>
+        </div>
+
+        <h3>Channels <span class="muted">— browse a genre, then tick individual channels</span></h3>
+        <label class="field">
+          Browse channels in genre
+          <select id="channelGenre"></select>
+        </label>
+        <input id="channelSearch" placeholder="Search channels…" />
+        <div id="channelList" class="scroll"></div>
+        <p class="hint" id="channelHint"></p>
+      </div>
+
+      <div id="result" class="card">
+        <strong>Install in Stremio</strong>
+        <p><a id="install" href="#">stremio://&hellip;</a></p>
+        <label class="field">Manifest URL</label>
+        <p id="manifest"></p>
+        <p class="hint">
+          This link contains your portal credentials and your selection. Treat it like a password
+          and keep this addon on a private network / behind auth. Add it to AIOStreams as a Custom
+          addon by pasting the manifest URL, then install AIOStreams in Stremio.
+        </p>
+      </div>
+    </main>
+
+    <script>
+      const $ = (id) => document.getElementById(id);
+      const status = $('status');
+      const state = {
+        genres: [],
+        channels: [],
+        selectedGenres: new Set(),
+        selectedChannels: new Set(),
+        genreCounts: new Map(),
+      };
+
+      function setStatus(message, kind) {
+        status.textContent = message;
+        status.className = kind || '';
+      }
+
+      function readCreds() {
+        const creds = { portalUrl: $('portalUrl').value.trim(), mac: $('mac').value.trim().toUpperCase() };
+        const optional = {
+          timezone: $('timezone').value.trim(),
+          serial: $('serial').value.trim(),
+          deviceId: $('deviceId').value.trim(),
+          userAgent: $('userAgent').value.trim(),
+        };
+        for (const [key, value] of Object.entries(optional)) if (value) creds[key] = value;
+        return creds;
+      }
+
+      function credsParams() {
+        const creds = readCreds();
+        return new URLSearchParams(creds);
+      }
+
+      function toBase64Url(text) {
+        return btoa(unescape(encodeURIComponent(text)))
+          .replace(/\+/g, '-')
+          .replace(/\//g, '_')
+          .replace(/=+$/, '');
+      }
+
+      function genreName(id) {
+        return (state.genres.find((g) => g.id === id) || {}).name || id;
+      }
+
+      function selectedCount() {
+        if (state.selectedGenres.size === 0 && state.selectedChannels.size === 0) {
+          return state.channels.length;
+        }
+        let count = 0;
+        for (const channel of state.channels) {
+          if (
+            state.selectedChannels.has(channel.id) ||
+            (channel.genreId && state.selectedGenres.has(channel.genreId))
+          ) {
+            count++;
+          }
+        }
+        return count;
+      }
+
+      function updateSummary() {
+        const total = state.channels.length;
+        const effective = selectedCount();
+        const none = state.selectedGenres.size === 0 && state.selectedChannels.size === 0;
+        $('summary').innerHTML = none
+          ? `Showing <strong>all ${total}</strong> channels. Tick genres or individual channels below to narrow it down.`
+          : `<strong>${effective}</strong> of ${total} channels selected ` +
+            `(${state.selectedGenres.size} genres, ${state.selectedChannels.size} channels).`;
+        $('clearSelection').disabled = none;
+      }
+
+      function renderGenreOptions() {
+        const select = $('channelGenre');
+        const current = select.value;
+        select.innerHTML = '<option value="all">All genres</option>';
+        for (const genre of state.genres) {
+          const option = document.createElement('option');
+          option.value = genre.id;
+          option.textContent = `${genre.name} (${state.genreCounts.get(genre.id) || 0})`;
+          select.append(option);
+        }
+        select.value = state.genres.some((g) => g.id === current) ? current : 'all';
+      }
+
+      function renderGenres() {
+        const query = $('genreSearch').value.trim().toLowerCase();
+        const list = state.genres.filter((g) => g.name.toLowerCase().includes(query));
+        const box = $('genreList');
+        box.innerHTML = '';
+        for (const genre of list.slice(0, 400)) {
+          const row = document.createElement('div');
+          row.className = 'item';
+
+          const label = document.createElement('label');
+          const cb = document.createElement('input');
+          cb.type = 'checkbox';
+          cb.checked = state.selectedGenres.has(genre.id);
+          cb.addEventListener('change', () => {
+            if (cb.checked) state.selectedGenres.add(genre.id);
+            else state.selectedGenres.delete(genre.id);
+            updateSummary();
+          });
+          const span = document.createElement('span');
+          span.textContent = `${genre.name} (${state.genreCounts.get(genre.id) || 0})`;
+          label.append(cb, span);
+
+          const browse = document.createElement('button');
+          browse.type = 'button';
+          browse.className = 'tiny';
+          browse.textContent = 'channels';
+          browse.addEventListener('click', () => {
+            $('channelGenre').value = genre.id;
+            $('channelSearch').value = '';
+            renderChannels();
+            $('channelList').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+          });
+
+          row.append(label, browse);
+          box.append(row);
+        }
+        if (list.length === 0) box.innerHTML = '<p class="muted">No genres match.</p>';
+      }
+
+      function renderChannels() {
+        const query = $('channelSearch').value.trim().toLowerCase();
+        const genre = $('channelGenre').value;
+        let list = state.channels;
+        if (genre !== 'all') list = list.filter((c) => c.genreId === genre);
+        if (query) list = list.filter((c) => c.name.toLowerCase().includes(query));
+
+        const box = $('channelList');
+        box.innerHTML = '';
+        const limit = 200;
+        for (const channel of list.slice(0, limit)) {
+          const row = document.createElement('label');
+          row.className = 'item';
+          const cb = document.createElement('input');
+          cb.type = 'checkbox';
+          cb.checked = state.selectedChannels.has(channel.id);
+          cb.addEventListener('change', () => {
+            if (cb.checked) state.selectedChannels.add(channel.id);
+            else state.selectedChannels.delete(channel.id);
+            updateSummary();
+          });
+          const span = document.createElement('span');
+          span.textContent = `${channel.name}${channel.genreId ? ' — ' + genreName(channel.genreId) : ''}`;
+          row.append(cb, span);
+          box.append(row);
+        }
+        if (list.length === 0) box.innerHTML = '<p class="muted">No channels match.</p>';
+
+        const scope = genre === 'all' ? 'all genres' : genreName(genre);
+        $('channelHint').textContent =
+          list.length > limit
+            ? `${scope}: showing first ${limit} of ${list.length} — type to narrow down.`
+            : `${scope}: ${list.length} channel${list.length === 1 ? '' : 's'}.`;
+      }
+
+      function renderPicker() {
+        state.genreCounts = new Map();
+        for (const channel of state.channels) {
+          if (channel.genreId) {
+            state.genreCounts.set(channel.genreId, (state.genreCounts.get(channel.genreId) || 0) + 1);
+          }
+        }
+        $('picker').style.display = 'block';
+        renderGenreOptions();
+        renderGenres();
+        renderChannels();
+        updateSummary();
+      }
+
+      $('load').addEventListener('click', async () => {
+        const creds = readCreds();
+        if (!creds.portalUrl || !creds.mac) return setStatus('Portal URL and MAC are required', 'err');
+        $('load').disabled = true;
+        setStatus('Loading channels and genres from the portal\u2026');
+        try {
+          const params = credsParams();
+          const [genresRes, channelsRes] = await Promise.all([
+            fetch('/api/genres?' + params).then((r) => r.json()),
+            fetch('/api/channels?' + params).then((r) => r.json()),
+          ]);
+          if (genresRes.error) throw new Error(genresRes.error);
+          if (channelsRes.error) throw new Error(channelsRes.error);
+          state.genres = genresRes.genres || [];
+          state.channels = channelsRes.channels || [];
+          setStatus(`Loaded ${state.channels.length} channels and ${state.genres.length} genres.`, 'ok');
+          renderPicker();
+        } catch (error) {
+          setStatus('Failed: ' + error.message, 'err');
+        } finally {
+          $('load').disabled = false;
+        }
+      });
+
+      $('test').addEventListener('click', async () => {
+        const creds = readCreds();
+        if (!creds.portalUrl || !creds.mac) return setStatus('Portal URL and MAC are required', 'err');
+        $('test').disabled = true;
+        setStatus('Testing\u2026');
+        try {
+          const response = await fetch('/api/test?' + credsParams());
+          const data = await response.json();
+          if (data.ok) setStatus(`Connected. ${data.channels} channels found.`, 'ok');
+          else setStatus('Failed: ' + data.error, 'err');
+        } catch (error) {
+          setStatus('Failed: ' + error.message, 'err');
+        } finally {
+          $('test').disabled = false;
+        }
+      });
+
+      $('genreSearch').addEventListener('input', renderGenres);
+      $('channelSearch').addEventListener('input', renderChannels);
+      $('channelGenre').addEventListener('change', renderChannels);
+
+      $('selectGenres').addEventListener('click', () => {
+        const query = $('genreSearch').value.trim().toLowerCase();
+        for (const genre of state.genres) {
+          if (genre.name.toLowerCase().includes(query)) state.selectedGenres.add(genre.id);
+        }
+        renderGenres();
+        updateSummary();
+      });
+
+      $('clearSelection').addEventListener('click', () => {
+        state.selectedGenres.clear();
+        state.selectedChannels.clear();
+        renderGenres();
+        renderChannels();
+        updateSummary();
+      });
+
+      $('form').addEventListener('submit', (event) => {
+        event.preventDefault();
+        const creds = readCreds();
+        if (!creds.portalUrl || !creds.mac) return setStatus('Portal URL and MAC are required', 'err');
+        const config = { ...creds };
+        const name = $('name').value.trim();
+        if (name) config.name = name;
+        if ($('streamRoute').value === 'proxy') config.streamRoute = 'proxy';
+        if (state.selectedGenres.size > 0) config.includeGenres = [...state.selectedGenres];
+        if (state.selectedChannels.size > 0) config.includeChannels = [...state.selectedChannels];
+
+        const token = toBase64Url(JSON.stringify(config));
+        const manifest = location.origin + '/' + token + '/manifest.json';
+        $('manifest').textContent = manifest;
+        $('install').href = manifest.replace(/^https?:\/\//, 'stremio://');
+        $('result').style.display = 'block';
+        setStatus('Manifest generated.', 'ok');
+      });
+    </script>
+  </body>
+</html>

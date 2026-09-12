@@ -1,0 +1,14 @@
+{
+  "name": "stalker-stremio-addon",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Prototype Stremio addon that exposes a Stalker/Ministra IPTV portal as a live TV catalog.",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "node src/server.js",
+    "test": "node --test"
+  }
+}
