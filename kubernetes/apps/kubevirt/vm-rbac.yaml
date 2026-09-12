@@ -20,6 +20,11 @@ rules:
   - apiGroups: [""]
     resources: ["secrets"]
     verbs: ["get", "create", "delete"]
+  # Destroy drops the VM disk (DataVolume cascade); the PVC needs explicit
+  # delete, else longhorn retains the volume forever (destroy leftovers).
+  - apiGroups: [""]
+    resources: ["persistentvolumeclaims"]
+    verbs: ["get", "delete"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
