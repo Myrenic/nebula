@@ -100,7 +100,7 @@ spec:
         # Proxies the Kubernetes API (RBAC-scoped to the chacdn-control
         # ServiceAccount) so the workplace-api can provision workspace pods.
         - name: kubectl-proxy
-          image: alpine/k8s:1.36.0
+          image: alpine/k8s:1.37.0
           command: ["kubectl", "proxy", "--port=8001", "--address=0.0.0.0", "--disable-filter=true"]
           ports:
             - name: api
