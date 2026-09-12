@@ -5,7 +5,7 @@ metadata:
   labels:
     app.kubernetes.io/name: stalker-stremio
 spec:
-  type: LoadBalancer
+  type: ClusterIP
   selector:
     app.kubernetes.io/name: stalker-stremio
   ports:

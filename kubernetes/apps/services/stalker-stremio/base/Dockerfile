@@ -6,4 +6,4 @@ WORKDIR /app
 COPY src ./src
 ENV PORT=7000
 EXPOSE 7000
-CMD ["node", "src/server.js"]
+CMD ["node", "src/start.js"]

@@ -24,7 +24,7 @@ spec:
       containers:
         - name: addon
           image: docker.io/library/node:22-alpine
-          command: ["node", "/app/src/server.js"]
+          command: ["node", "/app/src/start.js"]
           ports:
             - name: http
               containerPort: 7000

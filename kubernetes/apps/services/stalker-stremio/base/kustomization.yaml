@@ -7,6 +7,7 @@ configMapGenerator:
   - name: stalker-stremio-src
     files:
       - src/server.js
+      - src/start.js
       - src/stalker.js
       - src/addon.js
       - src/config-ui.html

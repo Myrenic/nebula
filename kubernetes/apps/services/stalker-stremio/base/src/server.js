@@ -1,6 +1,6 @@
 import { createServer } from 'node:http';
 import { readFileSync } from 'node:fs';
-import { fileURLToPath, pathToFileURL } from 'node:url';
+import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { Readable } from 'node:stream';
 import { StalkerPortal } from './stalker.js';
@@ -324,14 +324,5 @@ export function createApp() {
       console.error(`[request] ${error.message}`);
       json(res, 500, { error: error.message });
     });
-  });
-}
-
-const isMain = process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;
-if (isMain) {
-  const port = Number(process.env.PORT) || 7000;
-  createApp().listen(port, () => {
-    console.log(`stalker-stremio-addon listening on http://0.0.0.0:${port}`);
-    console.log(`Open http://localhost:${port} to configure a portal.`);
   });
 }

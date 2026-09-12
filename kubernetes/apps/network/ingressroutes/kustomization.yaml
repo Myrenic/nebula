@@ -21,6 +21,7 @@ resources:
   - ./obsidiansync.yaml
   - ./oauth2-proxy.yaml
   - ./spottarr.yaml
+  - ./stalker-stremio.yaml
   - ./traefik.yaml
   - ./uptime-kuma.yaml
   - ./velero-ui.yaml

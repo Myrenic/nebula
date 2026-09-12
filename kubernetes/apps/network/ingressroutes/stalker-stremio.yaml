@@ -1,0 +1,23 @@
+# Stalker -> Stremio addon. No oauth2-proxy here: Stremio fetches the manifest,
+# catalogs and streams without auth headers, so it is restricted to the LAN by
+# source address instead.
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: stalker-stremio
+  namespace: network
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    - match: Host(`stalker.${SECRET_DOMAIN_0}`)
+      kind: Rule
+      middlewares:
+        - name: lan-only
+          namespace: network
+      services:
+        - name: stalker-stremio
+          namespace: services
+          port: 7000
+  tls:
+    secretName: domain-0-prod-tls
