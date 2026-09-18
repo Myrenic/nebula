@@ -17,6 +17,7 @@ resources:
   - ./keycloak.yaml
   - ./longhorn.yaml
   - ./middlewares.yaml
+  - ./mushroom-finder.yaml
   - ./nexus.yaml
   - ./obsidiansync.yaml
   - ./oauth2-proxy.yaml

@@ -6,6 +6,7 @@ resources:
   - chacdn
   - frigate
   - guacamole
+  - mushroom-finder
   - spottarr
   - stalker-stremio
   - uptime-kuma

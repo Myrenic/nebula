@@ -7,3 +7,6 @@ node_modules/
 infrastructure/stacks/**/.terraform/
 infrastructure/stacks/**/terraform.tfstate*
 infrastructure/stacks/**/*.bak
+# Python
+__pycache__/
+*.pyc
