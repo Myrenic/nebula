@@ -1,4 +1,5 @@
-# Mushroom Finder — private household app (Keycloak login via oauth2-proxy).
+# Mushroom Finder: openbare, alleen-lezen kaart. Geen authenticatie nodig,
+# er valt niets te wijzigen en de gegevens zijn al openbaar.
 apiVersion: traefik.io/v1alpha1
 kind: IngressRoute
 metadata:
@@ -10,9 +11,8 @@ spec:
   routes:
     - match: Host(`mushrooms.${SECRET_DOMAIN_0}`)
       kind: Rule
-      middlewares:
-        - name: oauth2-proxy-auth
-          namespace: network
+      # Openbaar: geen oauth2-proxy meer. De app is alleen-lezen, toont geen
+      # exacte vindplaatsen en wordt per IP afgeremd.
       services:
         - name: mushroom-finder
           namespace: services
