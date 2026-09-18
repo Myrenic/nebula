@@ -1,0 +1,58 @@
+# Cilium op Talos v1.13.x, met kube-proxy nog aan.
+#
+# Deze waarden volgen de Talos-gids voor Cilium. De drie dingen die op Talos
+# anders zijn dan standaard:
+#   1. cgroupv2 en bpffs zijn al gemount door Talos -> Cilium mag dat niet zelf
+#      doen (cgroup.autoMount.enabled=false).
+#   2. Workloads mogen geen kernelmodules laden -> SYS_MODULE moet uit de
+#      capability-set, anders start de agent niet.
+#   3. IPAM op 'kubernetes', zodat Cilium de podCIDR per node gebruikt die
+#      kube-controller-manager al uitgeeft. Daardoor blijft de podCIDR gelijk
+#      aan wat Flannel nu gebruikt.
+ipam:
+  mode: kubernetes
+
+# kube-proxy blijft voor service-routing zorgen. Cilium doet hier alleen
+# pods-netwerk en NetworkPolicy. Later overstappen naar kube-proxy-free kan,
+# maar dat is een tweede wijziging en die wil je hier niet tegelijk.
+kubeProxyReplacement: false
+
+cgroup:
+  autoMount:
+    enabled: false
+  hostRoot: /sys/fs/cgroup
+
+# Verplicht op Talos: Talos stuurt kube-dns door naar de host-DNS, en dat
+# botst met Cilium's eBPF host-routing. Zonder deze regel werkt CoreDNS niet
+# en valt DNS in het hele cluster om.
+bpf:
+  hostLegacyRouting: true
+
+securityContext:
+  capabilities:
+    ciliumAgent:
+      - CHOWN
+      - KILL
+      - NET_ADMIN
+      - NET_RAW
+      - IPC_LOCK
+      - SYS_ADMIN
+      - SYS_RESOURCE
+      - DAC_OVERRIDE
+      - FOWNER
+      - SETGID
+      - SETUID
+    cleanCiliumState:
+      - NET_ADMIN
+      - SYS_ADMIN
+      - SYS_RESOURCE
+
+# Hubble erbij zodat je kunt zien wat er langskomt. Tijdens de audit-fase
+# (policies loggen in plaats van blokkeren) is dit het belangrijkste
+# gereedschap. De UI blijft uit; die kun je later port-forwarden.
+hubble:
+  enabled: true
+  relay:
+    enabled: true
+  ui:
+    enabled: false

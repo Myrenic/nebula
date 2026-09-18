@@ -1,0 +1,68 @@
+# Omni-clustertemplate voor cluster `talos-default`.
+#
+# Dit is de bron van waarheid voor het cluster. Wijzigingen horen hier, niet op
+# de nodes: Omni zet de machineconfig terug naar wat hier staat.
+#
+# Toepassen vanuit de root van de repo (de paden hieronder zijn daar relatief):
+#
+#   omnictl cluster template sync --file omni/cluster-template.yaml
+#
+# LET OP: een wijziging aan de machineconfig laat alle nodes rebooten.
+kind: Cluster
+name: talos-default
+kubernetes:
+  version: v1.36.3
+  manifests:
+    # Cilium is de CNI. Flannel gaat uit met patch 600 hieronder.
+    # one-time: Omni zet dit één keer neer bij bootstrap; Cilium beheert
+    # zichzelf daarna. Een upgrade is een bewuste handeling, niet iets wat
+    # Omni of Flux stil doorvoert.
+    - name: cilium
+      file: cilium/cilium-install.yaml
+      mode: one-time
+talos:
+  version: v1.13.8
+---
+kind: ControlPlane
+machines:
+  - 340932a1-baea-49ac-8bc0-282a554e87e6
+  - 4c4c4544-004c-4810-805a-b3c04f514433
+  - 4c4c4544-0053-5a10-8054-c7c04f333933
+patches:
+  - idOverride: 400-talos-default-control-planes-untaint
+    inline: |
+      cluster:
+        allowSchedulingOnControlPlanes: true
+  - idOverride: 500-extra-disk-nvme0n1-longhorn
+    inline: |
+      machine:
+        disks:
+          - device: /dev/nvme0n1
+            partitions:
+              - size: 0
+                mountpoint: /var/mnt/longhorn2
+  # Flannel eruit, Cilium ervoor in de plaats (zie de manifests hierboven).
+  # Talos v1.13 gebruikt nog deze vorm; vanaf v1.14 is het
+  # kind: KubeFlannelCNIConfig met $patch: delete.
+  - idOverride: 600-disable-flannel-cni
+    inline: |
+      cluster:
+        network:
+          cni:
+            name: none
+---
+kind: Workers
+---
+kind: Machine
+name: 340932a1-baea-49ac-8bc0-282a554e87e6
+---
+kind: Machine
+systemExtensions:
+  - siderolabs/i915
+  - siderolabs/intel-ucode
+  - siderolabs/iscsi-tools
+  - siderolabs/util-linux-tools
+name: 4c4c4544-004c-4810-805a-b3c04f514433
+---
+kind: Machine
+name: 4c4c4544-0053-5a10-8054-c7c04f333933
