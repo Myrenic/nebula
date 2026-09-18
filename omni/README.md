@@ -37,6 +37,29 @@ Let op: `validate` controleert **niet** of de manifestbestanden bestaan. Alleen
 **Een wijziging aan de machineconfig laat alle nodes rebooten.** Reken op
 5-15 minuten waarin het cluster helemaal weg is, inclusief de VM's.
 
+### Bestaande cluster omzetten (niet alleen bootstrap)
+
+Bij een verse bootstrap met `cni: none` komt Flannel nooit. Op een bestaand
+cluster blijft de DaemonSet staan en moet je hem zelf weghalen, anders draaien
+er twee CNI's naast elkaar:
+
+```bash
+kubectl -n kube-system delete ds kube-flannel
+```
+
+Daarna moeten pods die tijdens de overgang zijn gemaakt opnieuw, want hun
+netwerksandbox is nog van Flannel:
+
+```bash
+kubectl -n storage rollout restart ds longhorn-csi-plugin
+kubectl -n storage rollout restart ds longhorn-manager
+kubectl -n storage rollout restart deploy csi-attacher csi-provisioner csi-resizer csi-snapshotter
+```
+
+Zonder die stap blijven de CSI-controllers op `0/3`, wordt de Longhorn-node
+`Ready=False` en start geen enkele pod met een volume. De volledige nasleep
+staat in `MIGRATION-2026-09-18.md`.
+
 ## Cilium
 
 Cilium is de CNI; Flannel staat uit via patch `600-disable-flannel-cni`.
