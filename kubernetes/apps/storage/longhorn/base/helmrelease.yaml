@@ -24,6 +24,13 @@ spec:
     defaultSettings:
       autoSalvage: true
       defaultReplicaCount: 2
+      # Longhorn's eigen default is 200. Dit stond in het cluster op 100 (drift,
+      # niet in git) en dan mag de som van aangevraagde volumes per schijf niet
+      # boven de schijfgrootte uitkomen. Daardoor kon de tweede replica van de
+      # bestaande volumes niet geplaatst worden ("insufficient storage") en
+      # bleef alles op 1 replica staan. Met 200 past het wel; de echte
+      # bezetting blijft ruim onder de capaciteit (ongeveer 740 van 1211 GiB).
+      storageOverProvisioningPercentage: 200
       nodeDownPodDeletionPolicy: delete-both-statefulset-and-deployment-pod
       replicaAutoBalance: best-effort
       allowVolumeCreationWithDegradedAvailability: true
