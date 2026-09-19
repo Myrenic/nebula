@@ -9,7 +9,10 @@ spec:
   strategy:
     type: RollingUpdate
     rollingUpdate:
-      maxUnavailable: 1
+      # Met 2 replicas en maxUnavailable: 0 valt er bij een update nooit een
+      # Traefik weg: eerst komt de nieuwe erbij, dan gaat de oude eraf.
+      maxUnavailable: 0
+      maxSurge: 1
   selector:
     matchLabels:
       app: traefik
@@ -19,6 +22,8 @@ spec:
         app: traefik
     spec:
       serviceAccountName: traefik-sa
+      # Geef lopende verbindingen de tijd om af te ronden voordat de pod weg is.
+      terminationGracePeriodSeconds: 30
       topologySpreadConstraints:
         - maxSkew: 1
           topologyKey: kubernetes.io/hostname
@@ -44,11 +49,35 @@ spec:
             - --accesslog=true
             - --accesslog.filters.statuscodes=400-429
             - --accesslog.format=json
+            # /ping op de interne traefik-poort (8080), zodat de probes kunnen
+            # zien of Traefik echt draait. Zonder probes bleef een vastgelopen
+            # proxy gewoon verkeer krijgen.
+            - --ping=true
           ports:
             - containerPort: 80
               name: web
             - containerPort: 443
               name: websecure
+            - containerPort: 8080
+              name: traefik
+          readinessProbe:
+            httpGet:
+              path: /ping
+              port: traefik
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /ping
+              port: traefik
+            initialDelaySeconds: 20
+            periodSeconds: 20
+          lifecycle:
+            preStop:
+              exec:
+                # Laat het endpoint even uit de service-endpoints lopen voordat
+                # de container stopt.
+                command: ["/bin/sh", "-c", "sleep 5"]
           resources:
             requests:
               cpu: 50m
