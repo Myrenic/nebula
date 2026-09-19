@@ -13,6 +13,11 @@ rules:
   - apiGroups: [""]
     resources: ["nodes"]
     verbs: ["list", "get"]
+  # Nodig om een volume aan zijn PVC te koppelen, zodat volumes die maar één
+  # replica hoeven (frigate-media) overgeslagen kunnen worden.
+  - apiGroups: [""]
+    resources: ["persistentvolumeclaims"]
+    verbs: ["list", "get"]
   - apiGroups: ["longhorn.io"]
     resources: ["settings", "volumes"]
     verbs: ["get", "list", "patch", "update"]
@@ -84,13 +89,39 @@ spec:
                     echo "No change needed"
                   fi
 
+                  # PVC's die bewust op één replica blijven. Een tweede kopie
+                  # kost hier alleen schijfruimte: het zijn grote datawaar we
+                  # toch geen tweede exemplaar van nodig hebben.
+                  SINGLE_REPLICA_PVCS="frigate-media"
+                  EXCLUDED_VOLUMES=""
+                  for pvc in ${SINGLE_REPLICA_PVCS}; do
+                    for vn in $(kubectl get pvc -A \
+                        -o jsonpath="{range .items[?(@.metadata.name=='${pvc}')]}{.spec.volumeName}{' '}{end}"); do
+                      EXCLUDED_VOLUMES="${EXCLUDED_VOLUMES} ${vn}"
+                    done
+                  done
+                  echo "Blijft op 1 replica:${EXCLUDED_VOLUMES}"
+
                   # Converge EXISTING volumes to the target replica count, so
                   # volumes created under a different node count do not keep
                   # double-booking storage (2 replicas on 1 node) or stay
                   # under-replicated after the cluster grows.
-                  for v in $(kubectl -n storage get volumes.longhorn.io \
-                      -o jsonpath="{range .items[?(@.spec.numberOfReplicas!='${TARGET_REPLICAS}')]}{.metadata.name}{\" \"}{end}"); do
-                    echo "Setting volume ${v} to ${TARGET_REPLICAS} replicas"
-                    kubectl -n storage patch volume "${v}" \
-                      --type merge -p "{\"spec\":{\"numberOfReplicas\":\"${TARGET_REPLICAS}\"}}"
+                  #
+                  # Let op: numberOfReplicas is een getal. Een jsonpath-filter
+                  # als [?(@.spec.numberOfReplicas!='2')] vergelijkt dat met een
+                  # string en faalt met "incompatible types for comparison",
+                  # waardoor deze stap eerder stil niets deed. Daarom hier
+                  # ophalen en in de shell vergelijken.
+                  kubectl -n storage get volumes.longhorn.io \
+                    -o jsonpath='{range .items[*]}{.metadata.name}{" "}{.spec.numberOfReplicas}{"\n"}{end}' |
+                  while read -r volume current; do
+                    want="${TARGET_REPLICAS}"
+                    case " ${EXCLUDED_VOLUMES} " in
+                      *" ${volume} "*) want=1 ;;
+                    esac
+                    if [ "${current}" != "${want}" ]; then
+                      echo "Volume ${volume}: ${current} -> ${want} replica('s)"
+                      kubectl -n storage patch volume "${volume}" --type merge \
+                        -p "{\"spec\":{\"numberOfReplicas\":${want}}}"
+                    fi
                   done
