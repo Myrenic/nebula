@@ -101,6 +101,34 @@ git diff omni/cilium                    # bekijk wat er verandert
 omnictl cluster template sync --file omni/cluster-template.yaml
 ```
 
+## Machines zijn niet gelijk
+
+De control-plane bestaat uit twee bare-metal Dells en één Proxmox-VM
+(`talos.platform=nocloud`). Alleen de Dells hebben `/dev/nvme0n1`.
+
+Machine-specifieke hardware hoort daarom in een **`Machine`-document**, niet op
+de `ControlPlane`-set. De NVMe-Longhorn-patch stond eerst set-breed, werd ook
+op de VM toegepast, en hield die node uit de lucht: de falende
+`UserDiskConfigController` verhinderde de schrijfbare overlay, waarna kubelet
+niet meer startte. Zie `MIGRATION-2026-09-18.md`.
+
+```yaml
+kind: Machine
+name: 4c4c4544-004c-4810-805a-b3c04f514433   # bare metal
+patches:
+  - idOverride: 500-nvme-longhorn2-baremetal-1
+    inline: |
+      machine:
+        disks:
+          - device: /dev/nvme0n1
+            partitions:
+              - size: 0
+                mountpoint: /var/mnt/longhorn2
+```
+
+Twee machines kunnen niet dezelfde `idOverride` hebben; geef elke machine een
+eigen ID.
+
 ## Netwerkbeleid
 
 NetworkPolicy's deden niets onder Flannel. Met Cilium worden ze actief,

@@ -3,20 +3,28 @@
 # Dit is de bron van waarheid voor het cluster. Wijzigingen horen hier, niet op
 # de nodes: Omni zet de machineconfig terug naar wat hier staat.
 #
-# Toepassen vanuit de root van de repo (de paden hieronder zijn daar relatief):
+# Toepassen vanuit de root van de repo (het manifestpad is relatief aan dit
+# bestand):
 #
 #   omnictl cluster template sync --file omni/cluster-template.yaml
 #
-# LET OP: een wijziging aan de machineconfig laat alle nodes rebooten.
+# LET OP: een wijziging aan de machineconfig laat de machines rebooten.
+#
+# De drie machines zijn niet gelijk:
+#   340932a1-…  Proxmox-VM (talos.platform=nocloud), 1 schijf, geen NVMe
+#   4c4c4544-004c-…  bare metal (Dell), heeft /dev/nvme0n1
+#   4c4c4544-0053-…  bare metal (Dell), heeft /dev/nvme0n1
+#
+# Daarom staat de NVMe-patch bij de twee Machine-documenten en niet op de
+# control-plane-set: op de VM verwijst hij naar een schijf die er niet is en
+# dat houdt de node uit de lucht.
 kind: Cluster
 name: talos-default
 kubernetes:
   version: v1.36.3
   manifests:
-    # Cilium is de CNI. Flannel gaat uit met patch 600 hieronder.
-    # one-time: Omni zet dit één keer neer bij bootstrap; Cilium beheert
-    # zichzelf daarna. Een upgrade is een bewuste handeling, niet iets wat
-    # Omni of Flux stil doorvoert.
+    # Cilium is de CNI. Flannel gaat uit met de patch hieronder.
+    # one-time: Omni zet dit één keer neer; Cilium beheert zichzelf daarna.
     - name: cilium
       file: cilium/cilium-install.yaml
       mode: one-time
@@ -33,14 +41,6 @@ patches:
     inline: |
       cluster:
         allowSchedulingOnControlPlanes: true
-  - idOverride: 500-extra-disk-nvme0n1-longhorn
-    inline: |
-      machine:
-        disks:
-          - device: /dev/nvme0n1
-            partitions:
-              - size: 0
-                mountpoint: /var/mnt/longhorn2
   # Flannel eruit, Cilium ervoor in de plaats (zie de manifests hierboven).
   # Talos v1.13 gebruikt nog deze vorm; vanaf v1.14 is het
   # kind: KubeFlannelCNIConfig met $patch: delete.
@@ -53,6 +53,7 @@ patches:
 ---
 kind: Workers
 ---
+# Proxmox-VM: bewust geen NVMe-patch, die schijf bestaat hier niet.
 kind: Machine
 name: 340932a1-baea-49ac-8bc0-282a554e87e6
 ---
@@ -63,6 +64,24 @@ systemExtensions:
   - siderolabs/iscsi-tools
   - siderolabs/util-linux-tools
 name: 4c4c4544-004c-4810-805a-b3c04f514433
+patches:
+  - idOverride: 500-nvme-longhorn2-baremetal-1
+    inline: |
+      machine:
+        disks:
+          - device: /dev/nvme0n1
+            partitions:
+              - size: 0
+                mountpoint: /var/mnt/longhorn2
 ---
 kind: Machine
 name: 4c4c4544-0053-5a10-8054-c7c04f333933
+patches:
+  - idOverride: 500-nvme-longhorn2-baremetal-2
+    inline: |
+      machine:
+        disks:
+          - device: /dev/nvme0n1
+            partitions:
+              - size: 0
+                mountpoint: /var/mnt/longhorn2

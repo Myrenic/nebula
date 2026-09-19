@@ -1,42 +1,60 @@
-# CNI-migratie Flannel -> Cilium, 18 september 2026
+# CNI-migratie Flannel -> Cilium, 18-19 september 2026
 
-Gestart 21:22, cluster draaide om 22:30 weer op twee nodes.
+Gestart 18-09 21:22. Cluster volledig gezond op 19-09 06:30, alle drie de nodes
+Ready en geen enkel faulty volume.
+
+## Resultaat
+
+**Cilium is de CNI en NetworkPolicy wordt gehandhaafd.** Een testpod in
+`services` komt niet meer bij `mushroom-finder-postgres:5432` of bij
+aiostreams. Onder Flannel kon dat wel, en daarom was deze migratie nodig.
 
 ## Wat er is gedaan
 
-1. `omnictl cluster template sync` met de nieuwe template: patch
-   `600-disable-flannel-cni` (`cluster.network.cni.name: none`) en het
-   manifest `cilium` (CRD's + chart in één bestand).
-2. De kube-flannel DaemonSet was daarna nog aanwezig (op een bestaande
-   cluster haalt `cni: none` hem niet weg) en is met de hand verwijderd.
-   Talos heeft hem niet opnieuw aangemaakt, dus de patch werkt.
-3. Cilium nam het over: 70 CiliumEndpoints, nieuwe pods krijgen een IP,
-   DNS werkt.
-
-**Resultaat: NetworkPolicy wordt nu gehandhaafd.** Een testpod in `services`
-komt niet meer bij `mushroom-finder-postgres:5432` of bij aiostreams. Onder
-Flannel kon dat wel; daarom was deze migratie nodig.
+1. `omnictl cluster template sync` met patch `600-disable-flannel-cni`
+   (`cluster.network.cni.name: none`) en het Cilium-manifest (CRD's + chart in
+   één bestand, zie `omni/cilium/`).
+2. De kube-flannel DaemonSet handmatig verwijderd; op een bestaande cluster
+   haalt `cni: none` hem niet weg. Talos heeft hem niet opnieuw aangemaakt.
+3. Cilium nam het over: CiliumEndpoints voor de pods, nieuwe pods krijgen een
+   IP, DNS werkt.
 
 ## Wat er misging
 
-### Eén node kwam niet terug (hardware)
+### De NVMe-patch stond op de verkeerde plek (de echte oorzaak)
 
-`talos-sz9-1vs` rebootte als onderdeel van de configuratiewijziging en kwam
-terug zonder zijn extra NVMe-schijf:
+Het cluster heeft drie control-plane machines, en ze zijn niet gelijk:
+
+| Machine | Platform | Schijven |
+|---|---|---|
+| `340932a1-baea-49ac-8bc0-282a554e87e6` | `nocloud` (Proxmox-VM) | 1 schijf |
+| `4c4c4544-004c-4810-805a-b3c04f514433` | `metal` (Dell) | meerdere, o.a. NVMe |
+| `4c4c4544-0053-5a10-8054-c7c04f333933` | `metal` (Dell) | meerdere, o.a. NVMe |
+
+De patch `500-extra-disk-nvme0n1-longhorn` hing aan de **control-plane-set** en
+werd dus ook op de VM toegepast, waar `/dev/nvme0n1` niet bestaat. De
+`UserDiskConfigController` bleef daarop falen, en daardoor kon de node zijn
+ephemeral-partitie en de schrijfbare overlay niet opzetten:
 
 ```
 block.UserDiskConfigController: error processing user disk /dev/nvme0n1:
   lstat /dev/nvme0n1: no such file or directory
 k8s.KubeletServiceController: error writing kubelet PKI:
   open /etc/kubernetes/bootstrap-kubeconfig: read-only file system
+/proc/mounts: / overlay ro, lowerdir+=/layers/layer0,...     <- geen upperdir
 ```
 
-De schijf wordt door de kernel niet meer gezien, de root van die node staat
-daardoor read-only en kubelet start niet. Een tweede reboot hielp niet. Dit is
-hardware: de schijf of de aansluiting moet fysiek nagekeken worden.
+Zonder schrijfbare root start kubelet niet, en dus deed de node niet meer mee.
+De XFS-quotacheck-fouten op `/dev/vda5` waren een gevolg hiervan, geen
+schijfschade: de schijf van de VM is nooit stuk geweest.
 
-Deze node had al een geschiedenis van control-plane churn, zie `plan.md` en
-`chacdn-findings.md`.
+**Eerste diagnose was fout.** Ik dacht dat de VM zijn NVMe kwijt was en zocht
+het in hardware. De tweede reboot hielp daardoor niet.
+
+**Oplossing:** de patch van de control-plane-set naar de twee bare-metal
+`Machine`-documenten verplaatst (met een eigen `idOverride` per machine). De VM
+krijgt hem niet meer. Na de sync rebootte `sz9` meteen goed en kwam Ready
+terug.
 
 ### Pods met een Flannel-sandbox
 
@@ -45,62 +63,47 @@ Flannel. Toen Flannel weg was, was hun netwerk stuk:
 
 ```
 plugin type="flannel" failed (add):
-failed to load flannel 'subnet.env' file: /run/flannel/subnet.env: no such file
+failed to load flannel 'subnet.env': /run/flannel/subnet.env: no such file
 ```
 
-Dat trof `longhorn-csi-plugin` en `longhorn-manager`. Gevolg op een rij:
+Dat trof `longhorn-csi-plugin` en `longhorn-manager`. Gevolg: de
+CSI-controllers gingen naar `0/3`, de Longhorn-node werd `Ready=False` en er
+konden geen volumes meer aangehangen worden, dus geen enkele pod met een volume
+startte.
 
-- CSI-controllers (`csi-attacher`, `csi-provisioner`, `csi-resizer`,
-  `csi-snapshotter`) gingen naar `0/3`.
-- Longhorn-node `talos-45w-c87` werd `Ready=False` en de instance-manager daar
-  verdween, dus Longhorn weigerde volumes te attachen:
-  `node talos-45w-c87 is not ready, couldn't attach volume`.
-- Daardoor startten alle pods met een volume niet.
+**Oplossing:** `longhorn-csi-plugin`, `longhorn-manager` en de vier
+CSI-controller-deployments herstart, zodat ze een Cilium-sandbox kregen.
+Daarnaast: pods op de onbereikbare node geforceerd verwijderd, oude
+`VolumeAttachment`-objecten opgeruimd en 204 achtergebleven
+`Failed`/`NodeShutdown`-pods verwijderd.
 
-### Opgelost met
-
-- Pods op de onbereikbare node geforceerd verwijderd (containers waren daar al
-  dood, dus geen dubbele schrijver).
-- Oude `VolumeAttachment`-objecten naar de dode node verwijderd.
-- `longhorn-csi-plugin`, `longhorn-manager` en de vier CSI-controller-
-  deployments herstart, zodat ze een Cilium-sandbox kregen. Daarna gingen de
-  CSI-controllers naar `3/3` en kwam de Longhorn-node weer op `Ready`.
-- 204 achtergebleven `Failed`/`NodeShutdown`-pods opgeruimd (kubelet-resten van
-  alle reboots, eigendom van ReplicaSets die dachten dat ze klaar waren).
-- `oauth2-proxy` herstart; die was tijdens de herstart van Keycloak blijven
-  hangen op OIDC-discovery (kreeg HTML in plaats van JSON).
+Verder waren `oauth2-proxy` (bleef hangen op OIDC-discovery) en
+`helm-controller` (paniek bij het lezen van een beschadigd certificaat) stuk;
+beide opgelost met een verse pod.
 
 ## Eindstand
 
 | Onderdeel | Status |
 |---|---|
-| Nodes | 2 van 3 Ready; `talos-sz9-1vs` NotReady (schijf kwijt) |
-| Cilium | actief op beide gezonde nodes, 2/2 agents |
-| NetworkPolicy | **wordt gehandhaafd** (getest) |
-| Longhorn | 79 van 80 volumes gezond |
-| Deployments | alles gereed behalve `aiostreams` |
-| Paddenstoelen-app | werkt |
+| Nodes | 3 van 3 Ready |
+| Cilium | actief, agents op alle nodes |
+| NetworkPolicy | wordt gehandhaafd (getest) |
+| Longhorn | 80 van 80 volumes gezond, 0 faulted |
+| Deployments | alle gereed |
+| Flux | 29 van 29 kustomizations Ready |
+| aiostreams | data intact, geen verlies |
 
-## Wat jij moet doen
+## Lessen
 
-1. **`talos-sz9-1vs` fysiek nakijken.** De NVMe wordt niet gedetecteerd. Zonder
-   die schijf komt de node niet terug. Staat hij er weer in, dan herstelt
-   Longhorn de replica's vanzelf.
-2. **aiostreams.** Het volume `pvc-f0c5ca6c` had één replica, op de verdwenen
-   schijf. Longhorn zegt `not ready for workloads`. Komt de schijf terug, dan
-   is het er weer; anders moet het volume opnieuw opgebouwd worden en ben je de
-   data kwijt. Dat is een keuze, geen automatisme.
-3. **Velero is stuk** (pre-existent): `backupstoragelocation/default` staat al
-   19 dagen op `Unavailable` en `velero-ui` crashloopt. Er is dus geen
-   vangnet. Dit is de moeite waard om als volgende op te pakken.
-
-## Lessen voor de volgende keer
-
-- Migreer de CNI niet op een cluster waar nog een langdurige klus loopt, en
-  zeker niet zonder werkende backups.
-- Na de overstap moeten pods die tijdens de overgang zijn gemaakt opnieuw:
-  herstart de DaemonSets die de infrastructuur dragen (CSI, Longhorn) expliciet.
-- Op een bestaande cluster moet de Flannel DaemonSet met de hand weg; op een
-  verse bootstrap met `cni: none` komt hij nooit.
-- Reken erop dat één node niet terugkomt. Zorg dat er quorum overblijft: met 3
-  nodes en 1 eruit mag je de tweede niet zomaar rebooten.
+1. **Hang een diskpatch nooit aan een machine-set met ongelijke machines.**
+   Zet hem op de `Machine`-documenten die het apparaat echt hebben. Een
+   niet-bestaand device houdt de hele node uit de lucht.
+2. **Na een CNI-wissel moeten pods die tijdens de overgang zijn gemaakt
+   opnieuw.** Herstart expliciet de DaemonSets die de infrastructuur dragen
+   (CSI, Longhorn), en de controllers die bleven hangen.
+3. Op een bestaande cluster moet de Flannel DaemonSet met de hand weg; op een
+   verse bootstrap met `cni: none` komt hij nooit.
+4. Reken erop dat één node niet terugkomt. Met 3 nodes en 1 eruit mag je de
+   tweede niet zomaar rebooten: dan verlies je quorum.
+5. Doe dit niet slapend. Het is goed afgelopen, maar er waren uren waarin het
+   cluster op 2 van 3 nodes draaide en niemand kon ingrijpen.
