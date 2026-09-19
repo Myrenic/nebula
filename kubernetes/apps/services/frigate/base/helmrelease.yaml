@@ -20,7 +20,7 @@ spec:
           app:
             image:
               repository: ghcr.io/blakeblackshear/frigate
-              tag: 0.17.0
+              tag: 0.17.2
             env:
               LIBVA_DRIVER_NAME: iHD
               TZ: "${TZ}"
