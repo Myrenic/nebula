@@ -3,7 +3,3 @@ creation_rules:
     path_regex: 'kubernetes/.*\.sops\.ya?ml$'
     age: >-
       age10qpu76yk6rvyaunmsadkej3l0pwuk4mn4uhxnem4cyl9zjrucgmsndh72v
-  - path_regex: infrastructure/infra\.json$
-    age: >-
-      age10qpu76yk6rvyaunmsadkej3l0pwuk4mn4uhxnem4cyl9zjrucgmsndh72v
-    encrypted_regex: ^(password|username|ip_addr|gateway|url|auth_key|admin_password|public_ip|endpoint|auth_endpoint|rpc_secret|admin_token|access_key|secret_key)$

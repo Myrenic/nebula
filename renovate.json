@@ -25,6 +25,16 @@
       "automerge": true,
       "automergeType": "pr",
       "platformAutomerge": true
+    },
+    {
+      "description": "Vendored upstream operator bundles must move as a whole (image tag + CRDs + KUBEVIRT_VERSION env), so never automerge image bumps inside them",
+      "matchFileNames": [
+        "kubernetes/apps/kubevirt/operator/base/operator.yaml",
+        "kubernetes/apps/kubevirt/cdi/base/operator.yaml",
+        "kubernetes/apps/network/traefik-crds/crds.yaml"
+      ],
+      "automerge": false,
+      "labels": ["dependencies", "renovate", "manual-upgrade"]
     }
   ]
 }

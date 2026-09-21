@@ -3,106 +3,100 @@ name: Validate Changes
 on:
   pull_request:
     paths:
-      - '.github/workflows/infra-apply.yaml'
-      - '.github/workflows/validate-changes.yaml'
-      - 'infrastructure/stacks/**'
-      - 'infrastructure/modules/**'
-      - 'infrastructure/patches/**'
-      - 'infrastructure/infra.json'
+      - '.github/workflows/**'
+      - '.sops.yaml'
       - 'kubernetes/**'
-      - 'scripts/detect_infra_changes.py'
+      - 'README.md'
+  push:
+    branches: [main]
+    paths:
+      - '.sops.yaml'
+      - 'kubernetes/**'
 
 permissions:
   contents: read
 
 concurrency:
-  group: validate-changes-${{ github.event.pull_request.number }}
+  group: validate-changes-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  detect-changes:
-    runs-on: self-hosted
-    outputs:
-      infra_changed: ${{ steps.detect.outputs.infra_changed }}
-      kubernetes_changed: ${{ steps.detect.outputs.kubernetes_changed }}
-      stacks: ${{ steps.detect.outputs.stacks }}
+  kubernetes:
+    name: Kustomize builds
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
+      - uses: azure/setup-kubectl@v4
         with:
-          fetch-depth: 0
+          version: v1.36.3
 
-      - name: Detect changed components
-        id: detect
-        run: |
-          python3 scripts/detect_infra_changes.py \
-            --mode validate \
-            --base-sha "${{ github.event.pull_request.base.sha }}" \
-            --head-sha "${{ github.event.pull_request.head.sha }}" >> "$GITHUB_OUTPUT"
-
-  tofu-fmt:
-    needs: detect-changes
-    if: needs.detect-changes.outputs.infra_changed == 'true'
-    runs-on: self-hosted
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Check OpenTofu formatting
-        run: tofu fmt -check -recursive infrastructure
-
-  validate-stacks:
-    needs: detect-changes
-    if: needs.detect-changes.outputs.stacks != '[]'
-    runs-on: self-hosted
-    env:
-      AWS_ACCESS_KEY_ID: validate
-      AWS_SECRET_ACCESS_KEY: validate
-      AWS_EC2_METADATA_DISABLED: true
-      HOME: /opt/actions-runner
-      PATH: /usr/local/bin:/usr/bin:/bin
-    strategy:
-      matrix:
-        stack: ${{ fromJson(needs.detect-changes.outputs.stacks) }}
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: OpenTofu init
-        working-directory: infrastructure/stacks/${{ matrix.stack }}
-        run: tofu init -backend=false -input=false
-
-      - name: OpenTofu validate
-        working-directory: infrastructure/stacks/${{ matrix.stack }}
-        run: tofu validate -no-color
-
-  validate-provisioning:
-    needs: detect-changes
-    if: needs.detect-changes.outputs.infra_changed == 'true'
-    runs-on: self-hosted
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Check Ansible playbook syntax
-        run: |
-          set -euo pipefail
-          for playbook in infrastructure/stacks/*/playbook.yaml; do
-            ansible-playbook --syntax-check -i 'localhost,' -c local "$playbook"
-          done
-
-      - name: Check shell script syntax
-        run: |
-          set -euo pipefail
-          while IFS= read -r script; do
-            bash -n "$script"
-          done < <(find infrastructure -type f -name '*.sh' | sort)
-
-  validate-kubernetes:
-    needs: detect-changes
-    if: needs.detect-changes.outputs.kubernetes_changed == 'true'
-    runs-on: self-hosted
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Build Kubernetes apps
+      - name: Build kubernetes/apps
         run: kubectl kustomize kubernetes/apps >/dev/null
 
-      - name: Build Kubernetes bootstrap
+      - name: Build kubernetes/bootstrap
         run: kubectl kustomize kubernetes/bootstrap >/dev/null
+
+  secrets:
+    name: SOPS audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Every *.sops.yaml must actually be encrypted. A file named .sops.yaml
+      # without a sops block is a plaintext secret with a reassuring name: that
+      # is how the chacdn TURN shared secret ended up in a public repo.
+      - name: Every *.sops.yaml is encrypted
+        run: |
+          set -euo pipefail
+          status=0
+          while IFS= read -r file; do
+            if ! grep -q '^sops:' "$file"; then
+              echo "::error file=$file::missing sops block"
+              status=1
+            fi
+            if ! grep -q 'ENC\[' "$file"; then
+              echo "::error file=$file::no encrypted values (ENC[AES256_GCM...])"
+              status=1
+            fi
+          done < <(git ls-files 'kubernetes/**/*.sops.yaml')
+          exit "$status"
+
+      - name: No secret-looking plaintext in manifests
+        run: |
+          set -euo pipefail
+          status=0
+          while IFS= read -r file; do
+            case "$file" in
+              *.sops.yaml) continue ;;
+            esac
+            # stringData/data blocks that hold a literal (non-placeholder) value
+            if grep -nE '^[[:space:]]+(token|password|passphrase|secret|api[-_]?key|.*_SECRET|.*_TOKEN|.*_KEY):[[:space:]]*"?[A-Za-z0-9+/=_-]{16,}' "$file" >/dev/null; then
+              echo "::error file=$file::looks like a plaintext secret"
+              grep -nE '^[[:space:]]+(token|password|passphrase|secret|api[-_]?key|.*_SECRET|.*_TOKEN|.*_KEY):[[:space:]]*"?[A-Za-z0-9+/=_-]{16,}' "$file" | sed 's/:.*/: <redacted>/'
+              status=1
+            fi
+          done < <(git ls-files 'kubernetes/**/*.yaml')
+          exit "$status"
+
+  exposure:
+    name: Ingress exposure
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Exposure must be a decision, not an omission: a route is either behind
+      # an auth middleware or explicitly marked public with a reason.
+      - name: Routes are authenticated or explicitly public
+        run: |
+          set -euo pipefail
+          status=0
+          for file in kubernetes/apps/network/ingressroutes/*.yaml; do
+            grep -q '^kind: IngressRoute' "$file" || continue
+            if grep -qE 'oauth2-proxy-auth|lan-only|testlab\.io/exposure' "$file"; then
+              continue
+            fi
+            echo "::error file=$file::IngressRoute without an auth middleware and without a testlab.io/exposure annotation"
+            status=1
+          done
+          exit "$status"

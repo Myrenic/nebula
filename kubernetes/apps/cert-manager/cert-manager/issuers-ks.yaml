@@ -24,9 +24,6 @@ spec:
       name: domain-0-prod
     - apiVersion: cert-manager.io/v1
       kind: ClusterIssuer
-      name: domain-1-prod
-    - apiVersion: cert-manager.io/v1
-      kind: ClusterIssuer
       name: cluster-selfsigned
   healthCheckExprs:
     - apiVersion: cert-manager.io/v1
