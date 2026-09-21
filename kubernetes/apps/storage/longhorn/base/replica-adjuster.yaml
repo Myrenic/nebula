@@ -1,4 +1,16 @@
----
+# Converges Longhorn volume replica counts to the number of Ready nodes.
+#
+# Why this exists: Longhorn's per-volume numberOfReplicas is fixed at creation
+# time, so volumes created on a single-node cluster stay at 1 replica when a
+# second node appears, and volumes created on 3 nodes stay at 2 when the cluster
+# shrinks.
+#
+# What this job does NOT do (it used to, and it was a bug): patch
+# settings.longhorn.io/default-replica-count. That value is owned by the
+# longhorn HelmRelease, which renders it into the longhorn-default-setting
+# ConfigMap that longhorn-manager enforces - so Helm kept re-asserting the
+# chart value and the two writers fought each other. The replica count now has
+# exactly one source of truth per StorageClass parameter (git).
 apiVersion: v1
 kind: ServiceAccount
 metadata:
@@ -19,7 +31,7 @@ rules:
     resources: ["persistentvolumeclaims"]
     verbs: ["list", "get"]
   - apiGroups: ["longhorn.io"]
-    resources: ["settings", "volumes"]
+    resources: ["volumes"]
     verbs: ["get", "list", "patch", "update"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
@@ -51,9 +63,17 @@ spec:
         spec:
           serviceAccountName: longhorn-replica-adjuster
           restartPolicy: OnFailure
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 65534
+            seccompProfile:
+              type: RuntimeDefault
           containers:
             - name: adjuster
-              image: bitnami/kubectl:latest
+              # Was bitnami/kubectl:latest, which is unpinned and no longer
+              # published in Bitnami's free catalog. Same image as the other
+              # in-cluster kubectl jobs.
+              image: alpine/k8s:1.36.0
               command:
                 - /bin/sh
                 - -c
@@ -70,24 +90,7 @@ spec:
                   else
                     TARGET_REPLICAS=1
                   fi
-
-                  # Read current Longhorn setting
-                  CURRENT=$(kubectl -n storage get settings.longhorn.io default-replica-count -o jsonpath='{.value}' 2>/dev/null || echo "unknown")
-                  echo "Current default-replica-count: ${CURRENT}, target: ${TARGET_REPLICAS}"
-
-                  if [ "${CURRENT}" != "${TARGET_REPLICAS}" ]; then
-                    echo "Updating default-replica-count to ${TARGET_REPLICAS}"
-                    kubectl -n storage patch settings.longhorn.io default-replica-count \
-                      --type merge -p "{\"value\": \"${TARGET_REPLICAS}\"}"
-
-                    # Also update allow-volume-creation-with-degraded-availability
-                    if [ "${TARGET_REPLICAS}" -eq 1 ]; then
-                      kubectl -n storage patch settings.longhorn.io allow-volume-creation-with-degraded-availability \
-                        --type merge -p '{"value": "true"}'
-                    fi
-                  else
-                    echo "No change needed"
-                  fi
+                  echo "Target replica count: ${TARGET_REPLICAS}"
 
                   # PVC's die bewust op één replica blijven. Een tweede kopie
                   # kost hier alleen schijfruimte: het zijn grote datawaar we
@@ -125,3 +128,13 @@ spec:
                         -p "{\"spec\":{\"numberOfReplicas\":${want}}}"
                     fi
                   done
+              resources:
+                requests:
+                  cpu: 10m
+                  memory: 32Mi
+                limits:
+                  memory: 128Mi
+              securityContext:
+                allowPrivilegeEscalation: false
+                capabilities:
+                  drop: ["ALL"]

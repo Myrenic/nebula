@@ -5,4 +5,5 @@ metadata:
   annotations:
     kustomize.toolkit.fluxcd.io/prune: disabled
   labels:
+    # privileged on purpose: the Longhorn manager and instance-manager pods are privileged (they mount block devices).
     pod-security.kubernetes.io/enforce: privileged

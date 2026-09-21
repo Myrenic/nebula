@@ -4,6 +4,5 @@ kind: Kustomization
 resources:
   - ./helmrepository.yaml
   - ./helmrelease.yaml
-  - ./storageclass-1-replica.yaml
   - ./storageclass-2-replicas.yaml
   - ./replica-adjuster.yaml

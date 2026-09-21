@@ -23,7 +23,12 @@ spec:
   values:
     defaultSettings:
       autoSalvage: true
-      defaultReplicaCount: 2
+      # Single source of truth for the replica count. This used to be 2 while
+      # the replica-adjuster CronJob patched the same setting to 1 on a
+      # single-node cluster, so Helm kept re-asserting 2 and the two writers
+      # fought each other. The CronJob now only converges existing volumes;
+      # this value is what new volumes get.
+      defaultReplicaCount: 1
       # Longhorn's eigen default is 200. Dit stond in het cluster op 100 (drift,
       # niet in git) en dan mag de som van aangevraagde volumes per schijf niet
       # boven de schijfgrootte uitkomen. Daardoor kon de tweede replica van de
@@ -42,7 +47,14 @@ spec:
       defaultClassReplicaCount: 1
       allowVolumeExpansion: true
       reclaimPolicy: Retain
-      volumeBindingMode: Immediate
+      # WaitForFirstConsumer so Longhorn places replicas after the pod is
+      # scheduled. With Immediate, replicas are created before the scheduler
+      # has picked a node, which is how volumes end up attached to a node that
+      # does not run the pod (and on a single node it can wedge entirely).
+      # volumeBindingMode is immutable on a StorageClass: applying this change
+      # requires deleting the longhorn StorageClass once, after which Helm
+      # recreates it.
+      volumeBindingMode: WaitForFirstConsumer
     preUpgradeChecker:
       jobEnabled: false
       upgradeVersionCheck: true
