@@ -32,9 +32,9 @@ spec:
               - -c
               - |
                 set -eu
-                if [ ! -f /config/config.yml ]; then
+                if [ ! -s /config/config.yml ]; then
                   cp /seed/config.yml /config/config.yml
-                  echo "seeded /config/config.yml from the ConfigMap"
+                  echo "seeded /config/config.yml from the ConfigMap (missing or empty)"
                 else
                   echo "/config/config.yml already present, keeping it"
                 fi
