@@ -16,6 +16,28 @@ spec:
   values:
     controllers:
       frigate:
+        initContainers:
+          # /config/config.yml is by default a read-only ConfigMap projection, so
+          # frigate's own config editor (zones, masks) cannot write it. The
+          # ConfigMap is mounted at /seed/config.yml and copied onto the /config
+          # PVC once; from then on the live file is the one frigate edits and it
+          # survives restarts. Re-lock by mounting the ConfigMap at
+          # /config/config.yml again and dropping this init container.
+          seed-config:
+            image:
+              repository: ghcr.io/blakeblackshear/frigate
+              tag: 0.17.0
+            command:
+              - sh
+              - -c
+              - |
+                set -eu
+                if [ ! -f /config/config.yml ]; then
+                  cp /seed/config.yml /config/config.yml
+                  echo "seeded /config/config.yml from the ConfigMap"
+                else
+                  echo "/config/config.yml already present, keeping it"
+                fi
         containers:
           app:
             image:
@@ -109,7 +131,9 @@ spec:
         type: configMap
         name: frigate-config
         globalMounts:
-          - path: /config/config.yml
+          # seed only - see the seed-config init container above. Restore
+          # `path: /config/config.yml` to make the ConfigMap authoritative again.
+          - path: /seed/config.yml
             subPath: config.yml
       media:
         type: persistentVolumeClaim
