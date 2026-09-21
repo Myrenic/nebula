@@ -3,3 +3,27 @@ apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:
   - ./operator.yaml
+# The bundle above ships the kubevirt Namespace itself, which makes this
+# Kustomization its owner. kubernetes/apps/kubevirt/namespace.yaml used to be
+# applied by the root Kustomization as well, so the object had two owners: whenever
+# the two manifests disagreed on pod-security.kubernetes.io/enforce, the live
+# namespace flipped between them on every reconcile and virt-handler/virt-launcher
+# pods were rejected each time it landed on the stricter value. That file is gone;
+# the labels it carried are patched on here.
+patches:
+  - target:
+      kind: Namespace
+      name: kubevirt
+    patch: |-
+      apiVersion: v1
+      kind: Namespace
+      metadata:
+        name: kubevirt
+        annotations:
+          # Deleting a Namespace is not a no-op - it takes the VMs and their disks
+          # with it - so Flux is told never to garbage collect this one.
+          kustomize.toolkit.fluxcd.io/prune: disabled
+        labels:
+          app.kubernetes.io/managed-by: flux
+          pod-security.kubernetes.io/audit: privileged
+          pod-security.kubernetes.io/warn: privileged

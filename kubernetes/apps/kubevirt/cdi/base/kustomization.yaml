@@ -3,3 +3,21 @@ apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:
   - ./operator.yaml
+# Same situation as the kubevirt operator, and the same fix: the bundle owns the cdi
+# Namespace, and the manifest that used to be applied by the root Kustomization
+# (kubernetes/apps/kubevirt/cdi/namespace.yaml) is gone. No PodSecurity label is
+# added here because nothing has established what the CDI importers need, and the
+# bundle does not set one either.
+patches:
+  - target:
+      kind: Namespace
+      name: cdi
+    patch: |-
+      apiVersion: v1
+      kind: Namespace
+      metadata:
+        name: cdi
+        annotations:
+          kustomize.toolkit.fluxcd.io/prune: disabled
+        labels:
+          app.kubernetes.io/managed-by: flux

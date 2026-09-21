@@ -1,13 +1,11 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:
-  - ./namespace.yaml
   - ./operator
   - ./cdi
-  # Both Namespace objects below are also shipped inside the vendored operator
-  # bundles (operator/base/operator.yaml, cdi/base/operator.yaml), which means two
-  # Flux Kustomizations apply the same object every reconcile. They are only kept
-  # here for the labels the bundles lack; keep the PodSecurity values identical to
-  # the bundle's or the live namespace flips between them every reconcile, and
-  # removing one of the two requires disabling prune on the live object first (see
-  # the comment in namespace.yaml).
+# The kubevirt and cdi Namespaces are not listed here: each operator bundle ships
+# its own, and the operator Kustomization owns it. The extra labels those namespaces
+# need (PodSecurity, the prune guard) are patched onto the bundle in
+# operator/base/kustomization.yaml and cdi/base/kustomization.yaml, so there is
+# exactly one owner per Namespace instead of two manifests fighting over the labels
+# that PodSecurity reads.
