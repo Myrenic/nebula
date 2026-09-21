@@ -9,6 +9,9 @@ spec:
   routes:
     - match: Host(`grafana.${SECRET_DOMAIN_0}`)
       kind: Rule
+      middlewares:
+        - name: oauth2-proxy-auth
+          namespace: network
       services:
         - name: kube-prometheus-stack-grafana
           namespace: monitoring

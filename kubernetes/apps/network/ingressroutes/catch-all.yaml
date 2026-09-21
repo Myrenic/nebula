@@ -3,6 +3,10 @@ kind: IngressRoute
 metadata:
   name: catch-all
   namespace: network
+  annotations:
+    # Public by design: fallback handler for unknown hosts. It has no
+    # backend service, it only redirects.
+    testlab.io/exposure: public
 spec:
   entryPoints:
     - websecure

@@ -3,6 +3,9 @@ kind: IngressRoute
 metadata:
   name: aiostreams
   namespace: network
+  annotations:
+    # Public by design: Stremio addon URLs are fetched by media clients that cannot do OIDC.
+    testlab.io/exposure: public
 spec:
   entryPoints:
     - websecure

@@ -3,6 +3,9 @@ kind: IngressRoute
 metadata:
   name: oauth2-proxy
   namespace: network
+  annotations:
+    # Public by design: sign-in/sign-out endpoints and the session cookie exchange.
+    testlab.io/exposure: public
 spec:
   entryPoints:
     - websecure

@@ -17,6 +17,9 @@ spec:
     namespace: flux-system
   dependsOn:
     - name: cert-manager-issuers
+    # The Service is a LoadBalancer with a pinned MetalLB address; without the
+    # pool the API server rejects it (or it never leaves Pending).
+    - name: metallb-pool
   postBuild:
     substituteFrom:
       - kind: Secret

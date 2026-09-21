@@ -10,6 +10,9 @@ spec:
   routes:
     - match: Host(`rdp.${SECRET_DOMAIN_0}`)
       kind: Rule
+      middlewares:
+        - name: oauth2-proxy-auth
+          namespace: network
       services:
         - name: guacamole
           namespace: guacamole

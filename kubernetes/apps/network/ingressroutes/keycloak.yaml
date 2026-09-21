@@ -3,6 +3,9 @@ kind: IngressRoute
 metadata:
   name: keycloak
   namespace: network
+  annotations:
+    # Public by design: OIDC discovery/authorize/token endpoints for every login in this cluster.
+    testlab.io/exposure: public
 spec:
   entryPoints:
     - websecure

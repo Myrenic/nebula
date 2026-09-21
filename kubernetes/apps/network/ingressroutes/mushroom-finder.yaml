@@ -5,6 +5,9 @@ kind: IngressRoute
 metadata:
   name: mushroom-finder
   namespace: network
+  annotations:
+    # Public by design: read-only open-data site, no user data (see the comment in the file).
+    testlab.io/exposure: public
 spec:
   entryPoints:
     - websecure

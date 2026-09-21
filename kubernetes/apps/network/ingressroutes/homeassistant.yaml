@@ -29,6 +29,10 @@ kind: IngressRoute
 metadata:
   name: homeassistant
   namespace: network
+  annotations:
+    # Public by design: Home Assistant companion apps cannot do OIDC, HA has
+    # its own login and the LoadBalancer IP is RFC1918-only.
+    testlab.io/exposure: public
 spec:
   entryPoints:
     - websecure

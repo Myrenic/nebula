@@ -3,6 +3,9 @@ kind: IngressRoute
 metadata:
   name: uptime-kuma
   namespace: network
+  annotations:
+    # Public by design: status page, behind Uptime Kuma's own login for admin actions.
+    testlab.io/exposure: public
 spec:
   entryPoints:
     - websecure

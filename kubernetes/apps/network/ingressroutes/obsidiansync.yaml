@@ -29,6 +29,10 @@ kind: IngressRoute
 metadata:
   name: obsidiansync
   namespace: network
+  annotations:
+    # Public by design: CouchDB sync endpoint consumed by Obsidian clients
+    # that carry their own credentials.
+    testlab.io/exposure: public
 spec:
   entryPoints:
     - websecure
