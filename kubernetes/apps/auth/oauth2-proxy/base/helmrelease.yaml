@@ -39,7 +39,7 @@ spec:
       existingSecret: keycloak-webui-oauth
     extraArgs:
       provider: oidc
-      oidc-issuer-url: "https://keycloak.${SECRET_DOMAIN_0}/realms/chacdn"
+      oidc-issuer-url: "https://keycloak.${SECRET_DOMAIN_0}/realms/shacdn"
       oidc-email-claim: "email"
       oidc-groups-claim: "groups"
       redirect-url: "https://auth.${SECRET_DOMAIN_0}/oauth2/callback"
