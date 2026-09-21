@@ -4,14 +4,14 @@
 
 ## 1. Current State (scan 2026-09-09)
 
-**What exists — `shacdn` is the workplace:**
-- SPA: `kubernetes/apps/services/shacdn/webui` (Vite+React, `src/lib/k8s.ts`, `App.tsx`, `Dashboard.tsx`, `SessionView.tsx`) built to `base/www/` → `base/shacdn-webui.configmap.json` via `webui/scripts/build-configmap.mjs`.
-- Runtime: `base/webui.yaml` — `nginx:1.27-alpine` + `alpine/k8s:1.36.0 kubectl proxy` sidecar, `SA shacdn-control`.
+**What exists — `mytops` is the workplace:**
+- SPA: `kubernetes/apps/services/mytops/webui` (Vite+React, `src/lib/k8s.ts`, `App.tsx`, `Dashboard.tsx`, `SessionView.tsx`) built to `base/www/` → `base/mytops-webui.configmap.json` via `webui/scripts/build-configmap.mjs`.
+- Runtime: `base/webui.yaml` — `nginx:1.27-alpine` + `alpine/k8s:1.36.0 kubectl proxy` sidecar, `SA mytops-control`.
 - RBAC: `base/control.yaml` (`services` Deployments/Services) + `apps/network/ingressroutes/control.yaml` (`network` IngressRoutes). Control plane is the browser talking directly to K8s API via the proxy.
 - Per-user instance: `ws-{entryId}-{slug}` where `slug = hash(email)` (`lib/k8s.ts:25`), `Deployment` (image `ghcr.io/linuxserver/webtop:ubuntu-kde` / `firefox`, `PUID/PGID=1000`, `KasmVNC:3000`, `1Gi /dev/shm`, `256Mi req` / `2-4Gi lim`) + `Service:3000` + `IngressRoute` `Host(ws-*.${SECRET_DOMAIN_0})` → Traefik `websecure` + `domain-0-prod-tls`.
 - Catalog: static `base/www/catalog.json` (`apps: [{id, name, type: desktop|app, image, env, groups}]`), no persistence — stateless pods.
-- Auth: `auth/oauth2-proxy` (OIDC to `auth/keycloak` realm `shacdn`, `cookie-domain=.${SECRET_DOMAIN_0}`, `set-xauthrequest`), Traefik middlewares `oauth2-proxy-auth` chain (`forwardAuth` + `errors` → `oauth2-proxy`). Groups gate catalog entries.
-- Ingress: `network/traefik` v3.7 (2 replicas, `allowCrossNamespace=true`), `network/ingressroutes/shacdn.yaml` (`apps.${DOMAIN}` → `shacdn-webui:80/8001`), `middlewares.yaml` chain.
+- Auth: `auth/oauth2-proxy` (OIDC to `auth/keycloak` realm `mytops`, `cookie-domain=.${SECRET_DOMAIN_0}`, `set-xauthrequest`), Traefik middlewares `oauth2-proxy-auth` chain (`forwardAuth` + `errors` → `oauth2-proxy`). Groups gate catalog entries.
+- Ingress: `network/traefik` v3.7 (2 replicas, `allowCrossNamespace=true`), `network/ingressroutes/mytops.yaml` (`apps.${DOMAIN}` → `mytops-webui:80/8001`), `middlewares.yaml` chain.
 - Cluster: Talos single-node (Omni), Longhorn 1.11.2 `defaultClassReplicaCount:1` (cron `replica-adjuster` raises to 2 when 2nd node appears), Flux SOPS+age, Velero 2 replicas + Azure Blob, `monitoring/kube-prometheus-stack+loki`.
 - Dead code: `network/ingressroutes/coder.yaml` → `dev-platform/coder` (namespace gone).
 
@@ -28,18 +28,18 @@ No server-side workplace API (the browser currently reaches the Kubernetes API t
 
 **Synthesis:** Kasm = product UX + RDP/enterprise, abcdesktop = k8s-native isolation model, linuxserver = image supply chain. Nebula already is 70% of the way on the linuxserver path.
 
-## 3. Target Architecture (lazy — extend shacdn, don't rebuild)
+## 3. Target Architecture (lazy — extend mytops, don't rebuild)
 
 ```
 Browser → https://apps.$DOMAIN (Traefik, oauth2-proxy → Keycloak OIDC)
-        → IngressRoute shacdn-webui (network)
+        → IngressRoute mytops-webui (network)
         → workplace API (trusted identity headers + server-side catalog validation)
           ├─ runtime=container → Deployment + Service:3000 + IngressRoute → KasmVNC
           └─ runtime=vm-*      → VirtualMachine (KubeVirt) via CDI DataVolume clone
                                 → virt-launcher pod → guest RDP → guacd → browser
 Storage: Longhorn RWO + CDI for image import/clone; evaluate RWX only after multi-node migration testing
 Network: masquerade first, Multus/VLAN later
-AuthZ: Keycloak groups → server-side catalog enforcement → resources labelled `shacdn-owner={slug}`
+AuthZ: Keycloak groups → server-side catalog enforcement → resources labelled `mytops-owner={slug}`
 ```
 
 One catalog, one auth, one ingress, two runtime backends, one streaming abstraction. Keep the SPA, but add a small server-side workplace API before it can provision VMs; never give raw Kubernetes manifest creation to a browser-reachable identity.
@@ -78,9 +78,9 @@ One catalog, one auth, one ingress, two runtime backends, one streaming abstract
 
 | # | Title | Files | Effort | Impact |
 |---|---|---|---|---|
-| 1 | `shacdn: replace browser Kubernetes API access with workplace API` | `services/shacdn/base/*`, SPA API client | M | Required security boundary for containers, PVCs, and VMs |
-| 2 | `shacdn: catalog persistence and lifecycle policies` | catalog schema, workplace API, SPA | S | Makes disposable vs persistent behavior explicit |
-| 3 | `shacdn: resource caps and policy-aware idle lifecycle` | workplace API, namespace limits/policies | S | Prevents single-node exhaustion without deleting wanted state |
+| 1 | `mytops: replace browser Kubernetes API access with workplace API` | `services/mytops/base/*`, SPA API client | M | Required security boundary for containers, PVCs, and VMs |
+| 2 | `mytops: catalog persistence and lifecycle policies` | catalog schema, workplace API, SPA | S | Makes disposable vs persistent behavior explicit |
+| 3 | `mytops: resource caps and policy-aware idle lifecycle` | workplace API, namespace limits/policies | S | Prevents single-node exhaustion without deleting wanted state |
 | 4 | `infra: KubeVirt + CDI disposable Linux capability spike` | `kubernetes/apps/kubevirt/*` | M | Validates Talos/KVM, CDI, Longhorn, and actual node capacity |
 | 5 | `workplace: Guacamole RDP proof against fixed Linux VM` | `services/guacamole/*`, ingress, test VM | M | Validates the browser desktop path before catalog integration |
 
@@ -139,7 +139,7 @@ After #5: add server-side VM templates and Linux catalog integration, then Windo
 // Create/mount a per-user claim only when entry.persistence === "persistent".
 volumes: [
   { name: "dshm", emptyDir: { medium: "Memory", sizeLimit: "1Gi" } },
-  { name: "home", persistentVolumeClaim: { claimName: `shacdn-home-${owner}` } }
+  { name: "home", persistentVolumeClaim: { claimName: `mytops-home-${owner}` } }
 ],
 // + volumeMount { name:"home", mountPath:"/config" }
 ```

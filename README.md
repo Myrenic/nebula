@@ -44,18 +44,18 @@ Two apps keep their own code and manifests, outside this repository:
 
 | App | Repository | URL | Consumed by |
 | --- | --- | --- | --- |
-| shacdn | `Myrenic/shacdn` | `https://apps.${SECRET_DOMAIN_0}` | `kubernetes/apps/services/shacdn/` |
+| mytops | `Myrenic/mytops` | `https://apps.${SECRET_DOMAIN_0}` | `kubernetes/apps/services/mytops/` |
 | mushroom-finder | `Myrenic/mushroom-finder` | `https://mushrooms.${SECRET_DOMAIN_0}` | `kubernetes/apps/services/mushroom-finder/` |
 
 Each directory here contains only the deployment contract - a `GitRepository` (`source.yaml`) plus a `Kustomization` (`ks.yaml`) that points at `./base` in that repository, sets `targetNamespace` and substitutes `${...}` from `cluster-secrets`. Their own CI builds the manifests, rebuilds the generated ConfigMap bundles and asserts they are committed (`git diff --exit-code`), and Renovate runs there too.
 
 What stays here, because it is platform rather than app:
 
-- ingress routes and the auth chain (`network/ingressroutes/`), including the cross-namespace control RBAC for shacdn
-- the `storage/shacdn-rbac.yaml` grant for deleting Longhorn volumes during VM teardown (it must live in a Kustomization without `targetNamespace`, otherwise the namespace is overridden and the grant lands in the wrong namespace)
+- ingress routes and the auth chain (`network/ingressroutes/`), including the cross-namespace control RBAC for mytops
+- the `storage/mytops-rbac.yaml` grant for deleting Longhorn volumes during VM teardown (it must live in a Kustomization without `targetNamespace`, otherwise the namespace is overridden and the grant lands in the wrong namespace)
 - the secrets themselves (`cluster-secrets`), which the app repositories only reference by placeholder
 
-The Keycloak realm for both apps is `shacdn`.
+The Keycloak realm for both apps is `mytops`.
 
 
 ## CI

@@ -1,12 +1,12 @@
 # ChACDN findings log
 
 Snapshot: 2026-09-10, cluster `omni-talos-default-opencode`.
-Scope: `kubernetes/apps/services/shacdn`, `kubernetes/apps/kubevirt`,
-`kubernetes/apps/network/ingressroutes` (shacdn + control).
+Scope: `kubernetes/apps/services/mytops`, `kubernetes/apps/kubevirt`,
+`kubernetes/apps/network/ingressroutes` (mytops + control).
 
 ## What works (verified 2026-09-10)
 
-- `shacdn-webui` 3/3 Running; workplace API serves /api/health, /api/me,
+- `mytops-webui` 3/3 Running; workplace API serves /api/health, /api/me,
   /api/catalog, /api/workspaces (list/create/delete/restart).
 - Workspace creation: instant for containers (Deployment + Service +
   IngressRoute) and VMs (Secret-cloudinit + VirtualMachine + DataVolume +
@@ -26,7 +26,7 @@ Scope: `kubernetes/apps/services/shacdn`, `kubernetes/apps/kubevirt`,
    `cloudInitNoCloud.userData` > 2048 bytes, so every VM create was silently
    denied. User-data moved to a Secret (`cloudInitNoCloud.secretRef` — field
    name is `secretRef`, not `userDataSecretRef`), created by the API flow; add
-   `secrets get/create/delete` to `shacdn-vm-control` Role.
+   `secrets get/create/delete` to `mytops-vm-control` Role.
 
 3. Selkies: pip package ships `selkies-gstreamer` (not `selkies`), and jammy's
    gstreamer 1.20 lacks the `GstWebRTC-1.0` GIR binding → Namespace errors.
@@ -46,7 +46,7 @@ Scope: `kubernetes/apps/services/shacdn`, `kubernetes/apps/kubevirt`,
    privileged` now; deleting the virt-handler DS lets the operator recreate
    it once labels are right.
 
-6. `shacdn.yaml` dead `/api` route (`port: api` never existed) removed.
+6. `mytops.yaml` dead `/api` route (`port: api` never existed) removed.
 
 7. idle-culler: shell `${...}` was eaten by Flux envsubst → literal empty
    substitutions. Escaped as `$${...}` so Flux renders shell literals.

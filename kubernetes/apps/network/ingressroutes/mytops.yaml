@@ -2,7 +2,7 @@
 apiVersion: traefik.io/v1alpha1
 kind: IngressRoute
 metadata:
-  name: shacdn-webui
+  name: mytops-webui
   namespace: network
 spec:
   entryPoints:
@@ -17,7 +17,7 @@ spec:
         - name: oauth2-proxy-auth
           namespace: network
       services:
-        - name: shacdn-webui
+        - name: mytops-webui
           namespace: services
           port: 80
   tls:

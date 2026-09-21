@@ -3,7 +3,7 @@ kind: Kustomization
 resources:
   - ./namespace.yaml
   - aiostreams
-  - shacdn
+  - mytops
   - frigate
   - guacamole
   - mushroom-finder
