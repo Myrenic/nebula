@@ -1,0 +1,44 @@
+# Lets the workspace API manage KubeVirt VMs and CDI DataVolumes in the `kubevirt`
+# namespace, with the same ServiceAccount the container workspaces use.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: mytops-vm-control
+  namespace: kubevirt
+rules:
+  - apiGroups: ["kubevirt.io"]
+    resources: ["virtualmachines", "virtualmachineinstances"]
+    verbs: ["get", "list", "watch", "create", "patch", "delete"]
+  - apiGroups: ["cdi.kubevirt.io"]
+    resources: ["datavolumes"]
+    verbs: ["get", "list", "watch", "create", "delete"]
+  - apiGroups: [""]
+    resources: ["services"]
+    # watch: the idle culler deletes these with kubectl, which watches the
+    # object to confirm the delete.
+    verbs: ["get", "list", "watch", "create", "delete"]
+  # Cloud-init user-data exceeds the 2048-byte inline limit that the
+  # virtualmachine-validator webhook enforces, so it lives in a Secret referenced
+  # by cloudInitNoCloud.secretRef.
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["get", "list", "watch", "create", "delete"]
+  # Destroy drops the VM disk (DataVolume cascade); the PVC needs an explicit
+  # delete, else Longhorn retains the volume forever and every rebuild leaks one.
+  - apiGroups: [""]
+    resources: ["persistentvolumeclaims"]
+    verbs: ["get", "list", "watch", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: mytops-vm-control
+  namespace: kubevirt
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: mytops-vm-control
+subjects:
+  - kind: ServiceAccount
+    name: mytops-control
+    namespace: services

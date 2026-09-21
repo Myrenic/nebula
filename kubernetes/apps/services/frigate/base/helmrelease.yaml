@@ -73,7 +73,10 @@ spec:
             # binds 8554/8555 in the pod).
             image:
               repository: ghcr.io/shareed2k/reolinkproxy
-              tag: latest
+              # Pinned to the newest release. The running container was built from
+              # `latest`, whose digest matches no published tag, so this is the
+              # first version this sidecar actually names.
+              tag: v0.2.6
             env:
               REOLINK_CAMERA_0_NAME: frontdoor
               REOLINK_CAMERA_0_HOST: 10.0.50.209

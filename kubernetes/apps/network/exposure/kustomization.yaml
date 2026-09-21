@@ -1,0 +1,28 @@
+# This directory is the cluster's entire public surface: one file per host, plus
+# the shared middlewares, the wildcard certificate and the external endpoints that
+# point at machines outside the cluster. CI enforces that every route here is
+# either behind an auth middleware or explicitly marked public with a reason.
+#
+# Deliberately NOT in this list: the mytops control RBAC. It used to live here
+# ("one file per thing Traefik touches" was never true of a Role), and it now sits
+# in kubernetes/apps/mytops-control/ with the rest of that ServiceAccount's grants.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - ./aiostreams.yaml
+  - ./certificate.yaml
+  - ./flux-operator.yaml
+  - ./frigate.yaml
+  - ./grafana.yaml
+  - ./homeassistant.yaml
+  - ./keycloak.yaml
+  - ./longhorn.yaml
+  - ./middlewares.yaml
+  - ./mushroom-finder.yaml
+  - ./mytops.yaml
+  - ./oauth2-proxy.yaml
+  - ./obsidiansync.yaml
+  - ./spottarr.yaml
+  - ./stalker-stremio.yaml
+  - ./traefik.yaml
+  - ./uptime-kuma.yaml

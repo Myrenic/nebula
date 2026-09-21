@@ -34,8 +34,8 @@ spec:
       portNumber: 80
     config:
       # Client id/secret/cookie-secret live in the out-of-band
-      # keycloak-webui-oauth Secret (created manually, like arc-github-auth),
-      # so they don't need to be in SOPS.
+      # keycloak-webui-oauth Secret (created manually, not in SOPS):
+      # see README.md.
       existingSecret: keycloak-webui-oauth
     extraArgs:
       provider: oidc

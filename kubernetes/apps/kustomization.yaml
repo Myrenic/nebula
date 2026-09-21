@@ -8,5 +8,10 @@ resources:
   - storage
   - kubevirt
   - services
+  # Cluster-scoped and cross-namespace grants, applied straight from here because
+  # a Flux Kustomization with a targetNamespace would rewrite their namespace and
+  # move a grant into a namespace where it means nothing. See the header of
+  # kubernetes/apps/mytops-control/kustomization.yaml.
+  - mytops-control
   - auth
   - monitoring

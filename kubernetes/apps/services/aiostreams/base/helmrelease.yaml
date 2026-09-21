@@ -14,7 +14,10 @@ spec:
           app:
             image:
               repository: ghcr.io/viren070/aiostreams
-              tag: latest
+              # Pinned. `latest` pointed at exactly this release (same digest), so
+              # this changes nothing that is running; it only makes the version
+              # visible and updatable by Renovate.
+              tag: v2.34.1
             envFrom:
               - secretRef:
                   name: aiostreams-secret

@@ -4,14 +4,24 @@ on:
   pull_request:
     paths:
       - '.github/workflows/**'
+      - '.editorconfig'
       - '.sops.yaml'
+      - '.yamllint'
       - 'kubernetes/**'
+      - 'omni/**'
       - 'README.md'
+      - 'scripts/**'
   push:
     branches: [main]
     paths:
+      - '.github/workflows/**'
+      - '.editorconfig'
       - '.sops.yaml'
+      - '.yamllint'
       - 'kubernetes/**'
+      - 'omni/**'
+      - 'README.md'
+      - 'scripts/**'
 
 permissions:
   contents: read
@@ -36,6 +46,21 @@ jobs:
 
       - name: Build kubernetes/bootstrap
         run: kubectl kustomize kubernetes/bootstrap >/dev/null
+
+  manifests:
+    name: Flux paths and orphans
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: azure/setup-kubectl@v4
+        with:
+          version: v1.36.3
+
+      # Renders every spec.path Flux reconciles and reports manifests that no
+      # kustomization references. Run locally with scripts/check-manifests.sh.
+      - name: Render Flux paths and check for orphans
+        run: scripts/check-manifests.sh
 
   secrets:
     name: SOPS audit
@@ -86,12 +111,19 @@ jobs:
       - uses: actions/checkout@v4
 
       # Exposure must be a decision, not an omission: a route is either behind
-      # an auth middleware or explicitly marked public with a reason.
+      # an auth middleware or explicitly marked public with a reason. An empty
+      # glob is a failure of its own: it means the directory was moved or the
+      # routes were deleted, which must not read as a pass.
       - name: Routes are authenticated or explicitly public
         run: |
           set -euo pipefail
           status=0
-          for file in kubernetes/apps/network/ingressroutes/*.yaml; do
+          files=(kubernetes/apps/network/exposure/*.yaml)
+          if [ ! -e "${files[0]}" ]; then
+            echo "::error::kubernetes/apps/network/exposure is missing or holds no .yaml files"
+            exit 1
+          fi
+          for file in "${files[@]}"; do
             grep -q '^kind: IngressRoute' "$file" || continue
             if grep -qE 'oauth2-proxy-auth|lan-only|testlab\.io/exposure' "$file"; then
               continue
@@ -100,3 +132,51 @@ jobs:
             status=1
           done
           exit "$status"
+
+  yamllint:
+    name: YAML style
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Same command a maintainer runs locally, in a throwaway venv so the
+      # runner's system python is left alone:
+      #   python3 -m venv .venv-yamllint && .venv-yamllint/bin/pip install yamllint==1.38.0
+      #   .venv-yamllint/bin/yamllint --config-file .yamllint .
+      - name: Install yamllint
+        run: |
+          python3 -m venv "$RUNNER_TEMP/yamllint"
+          "$RUNNER_TEMP/yamllint/bin/pip" install --quiet yamllint==1.38.0
+          echo "$RUNNER_TEMP/yamllint/bin" >>"$GITHUB_PATH"
+
+      - name: Lint YAML
+        run: yamllint --config-file .yamllint .
+
+  kubeconform:
+    name: Manifest schemas
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: azure/setup-kubectl@v4
+        with:
+          version: v1.36.3
+
+      # Pinned so CI validates against the same release a maintainer installs
+      # locally:
+      #   curl -sSfL -o kubeconform.tar.gz https://github.com/yannh/kubeconform/releases/download/v0.7.0/kubeconform-linux-amd64.tar.gz
+      #   tar -xzf kubeconform.tar.gz kubeconform
+      - name: Install kubeconform
+        run: |
+          curl -sSfL -o "$RUNNER_TEMP/kubeconform.tar.gz" \
+            https://github.com/yannh/kubeconform/releases/download/v0.7.0/kubeconform-linux-amd64.tar.gz
+          tar -xzf "$RUNNER_TEMP/kubeconform.tar.gz" -C "$RUNNER_TEMP" kubeconform
+          echo "$RUNNER_TEMP" >>"$GITHUB_PATH"
+
+      # -ignore-missing-schemas: the cluster runs CRDs from Flux, Traefik,
+      # Longhorn, KubeVirt, cert-manager and the Prometheus operator, which the
+      # upstream schema registry does not serve; an unknown kind must not fail
+      # this job. -strict is deliberately not set for the same reason: unknown
+      # fields in third-party objects are not this repo's contract.
+      - name: Validate kubernetes/apps
+        run: kubectl kustomize kubernetes/apps | kubeconform -ignore-missing-schemas -summary

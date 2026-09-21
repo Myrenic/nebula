@@ -1,0 +1,63 @@
+# Lets the workspace API delete Longhorn volume objects when a VM workspace is
+# destroyed. The Longhorn StorageClasses use `reclaimPolicy: Retain`, so deleting
+# the PVC is not enough - the volume object stays behind and keeps its disk
+# allocated until something removes it.
+#
+# `storage` and not `longhorn-system`: that is the namespace the Longhorn
+# HelmRelease installs into here.
+#
+# `watch` is in the verb list because kubectl watches the object to confirm its
+# delete; without it the culler's log fills with "cannot watch resource" errors
+# that read like permission failures.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: mytops-longhorn-volumes
+  namespace: storage
+rules:
+  - apiGroups: ["longhorn.io"]
+    resources: ["volumes"]
+    verbs: ["get", "list", "watch", "delete"]
+---
+# Cluster-scoped half of the same job: the idle culler reclaims CDI's import
+# scratch volumes, which are PersistentVolumes named pvc-* whose claimRef is
+# prime-<uuid>-scratch and which sit in Released. CDI deletes its PVC but the
+# storage class retains, so every VM build otherwise leaves a 10Gi volume
+# allocated. Finding them means listing PersistentVolumes, which no namespaced
+# Role can do. The culler matches that scratch pattern only; a workspace disk or a
+# user home volume can never be selected by it.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: mytops-scratch-volumes
+rules:
+  - apiGroups: [""]
+    resources: ["persistentvolumes"]
+    verbs: ["get", "list", "watch", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: mytops-scratch-volumes
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: mytops-scratch-volumes
+subjects:
+  - kind: ServiceAccount
+    name: mytops-control
+    namespace: services
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: mytops-longhorn-volumes
+  namespace: storage
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: mytops-longhorn-volumes
+subjects:
+  - kind: ServiceAccount
+    name: mytops-control
+    namespace: services

@@ -14,7 +14,8 @@ spec:
           app:
             image:
               repository: ghcr.io/spottarr/spottarr
-              tag: latest
+              # Pinned. `latest` was this release (identical digest).
+              tag: 1.20.0
             env:
               USENET__HOSTNAME: "nl.newsdemon.com"
               USENET__USERNAME: "${SPOTTARR_USENET_USERNAME}"

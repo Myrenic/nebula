@@ -29,12 +29,12 @@ spec:
       # fought each other. The CronJob now only converges existing volumes;
       # this value is what new volumes get.
       defaultReplicaCount: 1
-      # Longhorn's eigen default is 200. Dit stond in het cluster op 100 (drift,
-      # niet in git) en dan mag de som van aangevraagde volumes per schijf niet
-      # boven de schijfgrootte uitkomen. Daardoor kon de tweede replica van de
-      # bestaande volumes niet geplaatst worden ("insufficient storage") en
-      # bleef alles op 1 replica staan. Met 200 past het wel; de echte
-      # bezetting blijft ruim onder de capaciteit (ongeveer 740 van 1211 GiB).
+      # Longhorn's own default is 200. This cluster had it at 100 (drift, set
+      # outside git), and at 100 the sum of requested volumes per disk may not
+      # exceed the disk size - so the second replica of the existing volumes
+      # could not be scheduled ("insufficient storage") and everything stayed at
+      # one replica. At 200 it fits, and actual usage stays far below capacity
+      # (roughly 740 of 1211 GiB).
       storageOverProvisioningPercentage: 200
       nodeDownPodDeletionPolicy: delete-both-statefulset-and-deployment-pod
       replicaAutoBalance: best-effort

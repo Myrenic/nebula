@@ -1,0 +1,22 @@
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: mushroom-finder
+  namespace: network
+  annotations:
+    # Public by design: read-only open-data site that shows no exact locations,
+    # serves nothing user-specific and is rate limited per IP, so there is no
+    # account to sign into.
+    testlab.io/exposure: public
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    - match: Host(`mushrooms.${SECRET_DOMAIN_0}`)
+      kind: Rule
+      services:
+        - name: mushroom-finder
+          namespace: services
+          port: 80
+  tls:
+    secretName: domain-0-prod-tls

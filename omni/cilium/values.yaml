@@ -1,20 +1,21 @@
-# Cilium op Talos v1.13.x, met kube-proxy nog aan.
+# Cilium on Talos v1.13.x, with kube-proxy still enabled.
 #
-# Deze waarden volgen de Talos-gids voor Cilium. De drie dingen die op Talos
-# anders zijn dan standaard:
-#   1. cgroupv2 en bpffs zijn al gemount door Talos -> Cilium mag dat niet zelf
-#      doen (cgroup.autoMount.enabled=false).
-#   2. Workloads mogen geen kernelmodules laden -> SYS_MODULE moet uit de
-#      capability-set, anders start de agent niet.
-#   3. IPAM op 'kubernetes', zodat Cilium de podCIDR per node gebruikt die
-#      kube-controller-manager al uitgeeft. Daardoor blijft de podCIDR gelijk
-#      aan wat Flannel nu gebruikt.
+# These values follow the Talos guide for Cilium. The three things that differ
+# from the default on Talos:
+#   1. cgroupv2 and bpffs are already mounted by Talos -> Cilium must not do that
+#      itself (cgroup.autoMount.enabled=false).
+#   2. Workloads may not load kernel modules -> SYS_MODULE has to be out of the
+#      capability set, otherwise the agent does not start.
+#   3. IPAM on 'kubernetes', so Cilium uses the per-node podCIDR that
+#      kube-controller-manager already hands out. That keeps the podCIDR equal to
+#      what Flannel uses now.
 ipam:
   mode: kubernetes
 
-# kube-proxy blijft voor service-routing zorgen. Cilium doet hier alleen
-# pods-netwerk en NetworkPolicy. Later overstappen naar kube-proxy-free kan,
-# maar dat is een tweede wijziging en die wil je hier niet tegelijk.
+# kube-proxy keeps taking care of service routing. Cilium only does pod
+# networking and NetworkPolicy here. Switching to kube-proxy-free later is
+# possible, but that is a second change and you do not want it at the same time
+# as this one.
 kubeProxyReplacement: false
 
 cgroup:
@@ -22,9 +23,9 @@ cgroup:
     enabled: false
   hostRoot: /sys/fs/cgroup
 
-# Verplicht op Talos: Talos stuurt kube-dns door naar de host-DNS, en dat
-# botst met Cilium's eBPF host-routing. Zonder deze regel werkt CoreDNS niet
-# en valt DNS in het hele cluster om.
+# Required on Talos: Talos forwards kube-dns to the host DNS, and that collides
+# with Cilium's eBPF host routing. Without this rule CoreDNS does not work and
+# DNS falls over cluster-wide.
 bpf:
   hostLegacyRouting: true
 
@@ -47,9 +48,9 @@ securityContext:
       - SYS_ADMIN
       - SYS_RESOURCE
 
-# Hubble erbij zodat je kunt zien wat er langskomt. Tijdens de audit-fase
-# (policies loggen in plaats van blokkeren) is dit het belangrijkste
-# gereedschap. De UI blijft uit; die kun je later port-forwarden.
+# Hubble added so you can see what passes by. During the audit phase (policies
+# logging instead of blocking) this is the most important tool. The UI stays off;
+# you can port-forward to it later.
 hubble:
   enabled: true
   relay:

@@ -1,12 +1,7 @@
+# The age key that decrypts every *.sops.yaml in this repository. It belongs on the
+# machine that bootstraps the cluster, never in git.
 age.agekey
-inspo/kubernetes/*/*/charts/
-sealed-secret-backup.yaml
-node_modules/
 
-# Infrastructure / OpenTofu
-infrastructure/stacks/**/.terraform/
-infrastructure/stacks/**/terraform.tfstate*
-infrastructure/stacks/**/*.bak
-# Python
-__pycache__/
-*.pyc
+# Node dependencies of the app repositories that used to live here; harmless if one
+# is ever cloned into a subdirectory.
+node_modules/

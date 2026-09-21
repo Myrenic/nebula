@@ -1,26 +1,24 @@
----
+# Traefik reads IngressRoutes, Middlewares and the Services behind them from every
+# namespace, so its ServiceAccount needs cluster-wide read access to those.
+#
+# This file used to grant the same core and networking rules twice (once with
+# `nodes`/`configmaps`, once without) and to include the `traefik.containo.us`
+# group, which is the v2 API group - this cluster runs traefik.io. Duplicates hid
+# what was actually granted.
+#
+# The networking.k8s.io rules are gone along with the kubernetesIngress provider
+# itself: there is not a single `Ingress` object in this cluster (everything is an
+# IngressRoute) and no IngressClass, so those rules could only ever be dead weight.
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
   name: traefik-access
 rules:
   - apiGroups: [""]
-    resources: ["secrets", "endpoints", "services", "nodes", "configmaps"]
+    resources: ["services", "endpoints", "secrets", "configmaps", "nodes"]
     verbs: ["get", "list", "watch"]
   - apiGroups: ["discovery.k8s.io"]
     resources: ["endpointslices"]
-    verbs: ["get", "list", "watch"]
-  - apiGroups: ["networking.k8s.io"]
-    resources: ["ingresses", "ingressclasses", "ingresses/status"]
-    verbs: ["get", "list", "watch", "update"]
-  - apiGroups: [""]
-    resources: ["secrets", "endpoints", "services"]
-    verbs: ["get", "list", "watch"]
-  - apiGroups: ["networking.k8s.io", "extensions"]
-    resources: ["ingresses", "ingressclasses", "ingresses/status"]
-    verbs: ["get", "list", "watch", "update"]
-  - apiGroups: ["traefik.containo.us"]
-    resources: ["*"]
     verbs: ["get", "list", "watch"]
   - apiGroups: ["traefik.io"]
     resources: ["*"]

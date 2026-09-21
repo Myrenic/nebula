@@ -2,11 +2,12 @@ apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:
   - ./namespace.yaml
-  - aiostreams
-  - mytops
-  - frigate
-  - guacamole
-  - mushroom-finder
-  - spottarr
-  - stalker-stremio
-  - uptime-kuma
+  - ./aiostreams
+  - ./frigate
+  # These two deploy from their own repositories; only the GitRepository and the
+  # Flux Kustomization live here.
+  - ./mushroom-finder
+  - ./mytops
+  - ./spottarr
+  - ./stalker-stremio
+  - ./uptime-kuma

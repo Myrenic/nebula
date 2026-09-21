@@ -5,7 +5,7 @@ metadata:
 spec:
   config:
     featureGates:
-    - HonorWaitForFirstConsumer
+      - HonorWaitForFirstConsumer
   imagePullPolicy: IfNotPresent
   infra:
     nodeSelector:

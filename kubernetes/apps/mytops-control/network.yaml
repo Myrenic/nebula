@@ -1,0 +1,37 @@
+# Lets the workspace API create and delete the per-user IngressRoutes that route
+# to workspace pods, so a user only ever reaches their own workspace host.
+#
+# Two details are deliberate:
+#
+# - No `update` verb. A route that drifts is repaired by deleting and recreating
+#   it; a PUT is answered with 403. Granting `update` would silently widen this
+#   ServiceAccount beyond what the API does.
+# - The names say what the grant is (routes), not who holds it. This Role used to
+#   be called `mytops-control` and lived in the routes directory, applied by the
+#   `ingressroutes` Kustomization; moving it here means that Kustomization prunes
+#   its copy. Renaming it is what makes the handover safe: the replacement exists
+#   before the old object disappears, so there is no window in which the API has
+#   no permission at all.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: mytops-workspace-routes
+  namespace: network
+rules:
+  - apiGroups: ["traefik.io"]
+    resources: ["ingressroutes"]
+    verbs: ["get", "list", "create", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: mytops-workspace-routes
+  namespace: network
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: mytops-workspace-routes
+subjects:
+  - kind: ServiceAccount
+    name: mytops-control
+    namespace: services

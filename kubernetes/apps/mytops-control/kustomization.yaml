@@ -1,0 +1,20 @@
+# Everything the workspace API's ServiceAccount is allowed to do, in one place.
+#
+# The subject of every grant below is `mytops-control`, a ServiceAccount that the
+# mytops deployment creates in the `services` namespace. The API reaches the
+# cluster through a kubectl-proxy sidecar that runs with it, bound to the pod's
+# loopback interface.
+#
+# Why these files are not part of kubernetes/apps/services/mytops: that directory
+# is applied by a Flux Kustomization with `targetNamespace: services`, which
+# rewrites the namespace of every namespaced object it renders. A Role that has to
+# land in `network`, `storage` or `kubevirt` cannot live there without being moved
+# to the wrong namespace, where it grants nothing. This directory is applied by the
+# root Kustomization instead and sets no targetNamespace, so each object keeps the
+# namespace it declares.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - ./network.yaml
+  - ./storage.yaml
+  - ./kubevirt.yaml

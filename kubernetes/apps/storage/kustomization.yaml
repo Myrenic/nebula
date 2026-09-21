@@ -1,7 +1,8 @@
-# yaml-language-server: $schema=https://json.schemastore.org/kustomization
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:
   - ./namespace.yaml
-  - ./longhorn/ks.yaml
-  - ./mytops-rbac.yaml
+  - ./longhorn
+  # The cross-namespace grant that lets the workspace API delete Longhorn volumes
+  # lives in kubernetes/apps/mytops-control/storage.yaml, together with the rest of
+  # that ServiceAccount's permissions.

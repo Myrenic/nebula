@@ -65,7 +65,7 @@ data:
         <div class="card">
             <div class="spinner"></div>
             <h1>Signing you in</h1>
-            <p>Redirecting to Azure Entra ID...</p>
+            <p>Redirecting to Keycloak...</p>
             <a href="https://auth.${SECRET_DOMAIN_0}/oauth2/start">Sign in manually</a>
         </div>
     </body>

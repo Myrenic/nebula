@@ -25,8 +25,8 @@ rules:
   - apiGroups: [""]
     resources: ["nodes"]
     verbs: ["list", "get"]
-  # Nodig om een volume aan zijn PVC te koppelen, zodat volumes die maar één
-  # replica hoeven (frigate-media) overgeslagen kunnen worden.
+  # Needed to follow a volume back to its PVC, so that the volumes which must
+  # stay at one replica (frigate-media) can be skipped.
   - apiGroups: [""]
     resources: ["persistentvolumeclaims"]
     verbs: ["list", "get"]
@@ -92,9 +92,9 @@ spec:
                   fi
                   echo "Target replica count: ${TARGET_REPLICAS}"
 
-                  # PVC's die bewust op één replica blijven. Een tweede kopie
-                  # kost hier alleen schijfruimte: het zijn grote datawaar we
-                  # toch geen tweede exemplaar van nodig hebben.
+                  # PVCs that deliberately stay at one replica. A second copy
+                  # only costs disk space here: this is bulk data that does not
+                  # need a spare.
                   SINGLE_REPLICA_PVCS="frigate-media"
                   EXCLUDED_VOLUMES=""
                   for pvc in ${SINGLE_REPLICA_PVCS}; do
@@ -103,18 +103,18 @@ spec:
                       EXCLUDED_VOLUMES="${EXCLUDED_VOLUMES} ${vn}"
                     done
                   done
-                  echo "Blijft op 1 replica:${EXCLUDED_VOLUMES}"
+                  echo "Staying at 1 replica:${EXCLUDED_VOLUMES}"
 
                   # Converge EXISTING volumes to the target replica count, so
                   # volumes created under a different node count do not keep
                   # double-booking storage (2 replicas on 1 node) or stay
                   # under-replicated after the cluster grows.
                   #
-                  # Let op: numberOfReplicas is een getal. Een jsonpath-filter
-                  # als [?(@.spec.numberOfReplicas!='2')] vergelijkt dat met een
-                  # string en faalt met "incompatible types for comparison",
-                  # waardoor deze stap eerder stil niets deed. Daarom hier
-                  # ophalen en in de shell vergelijken.
+                  # Note: numberOfReplicas is a number. A jsonpath filter such as
+                  # [?(@.spec.numberOfReplicas!='2')] compares it to a string and
+                  # fails with "incompatible types for comparison", which is how
+                  # this step silently did nothing before. So read the values here
+                  # and compare them in the shell.
                   kubectl -n storage get volumes.longhorn.io \
                     -o jsonpath='{range .items[*]}{.metadata.name}{" "}{.spec.numberOfReplicas}{"\n"}{end}' |
                   while read -r volume current; do

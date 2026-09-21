@@ -1,4 +1,3 @@
----
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -9,8 +8,8 @@ spec:
   strategy:
     type: RollingUpdate
     rollingUpdate:
-      # Met 2 replicas en maxUnavailable: 0 valt er bij een update nooit een
-      # Traefik weg: eerst komt de nieuwe erbij, dan gaat de oude eraf.
+      # With two replicas and maxUnavailable: 0 an update never takes a Traefik
+      # down: the new one joins first, the old one leaves after.
       maxUnavailable: 0
       maxSurge: 1
   selector:
@@ -22,7 +21,7 @@ spec:
         app: traefik
     spec:
       serviceAccountName: traefik-sa
-      # Geef lopende verbindingen de tijd om af te ronden voordat de pod weg is.
+      # Give open connections time to finish before the pod goes away.
       terminationGracePeriodSeconds: 30
       topologySpreadConstraints:
         - maxSkew: 1
@@ -42,16 +41,14 @@ spec:
             - --entrypoints.web.http.redirections.entrypoint.to=websecure
             - --entrypoints.web.http.redirections.entrypoint.scheme=https
             - --entrypoints.websecure.address=:443
-            - --providers.kubernetesingress.ingressclass=traefik
-            - --providers.kubernetesingress.ingressendpoint.hostname=testlab.tuntelder.com
             - --providers.kubernetescrd
             - --providers.kubernetescrd.allowCrossNamespace=true
             - --accesslog=true
             - --accesslog.filters.statuscodes=400-429
             - --accesslog.format=json
-            # /ping op de interne traefik-poort (8080), zodat de probes kunnen
-            # zien of Traefik echt draait. Zonder probes bleef een vastgelopen
-            # proxy gewoon verkeer krijgen.
+            # /ping on the internal traefik port (8080) so the probes can tell
+            # whether Traefik is actually alive. There were no probes at all
+            # before this, which meant a stuck proxy kept receiving traffic.
             - --ping=true
           ports:
             - containerPort: 80
@@ -75,8 +72,8 @@ spec:
           lifecycle:
             preStop:
               exec:
-                # Laat het endpoint even uit de service-endpoints lopen voordat
-                # de container stopt.
+                # Let the endpoint leave the service endpoints before the
+                # container stops.
                 command: ["/bin/sh", "-c", "sleep 5"]
           resources:
             requests:

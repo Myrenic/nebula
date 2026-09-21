@@ -98,4 +98,7 @@ data:
       retain:
         default: 7
 
-    version: 0.17-0
+    # Frigate rewrites this file when the schema version does not match the
+    # running release; keep it in step with the image tag in helmrelease.yaml so a
+    # fresh install does not start from an old schema.
+    version: 0.18-0

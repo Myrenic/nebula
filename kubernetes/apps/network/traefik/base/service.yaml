@@ -1,13 +1,19 @@
----
 apiVersion: v1
 kind: Service
 metadata:
   name: traefik
   namespace: network
   annotations:
+    # MetalLB hands out 10.0.50.4 (pool 10.0.50.4-10.0.50.6) and this is the only
+    # LoadBalancer service in the cluster.
     metallb.io/loadBalancerIPs: 10.0.50.4
 spec:
   type: LoadBalancer
+  # Local keeps the client IP for the ipAllowList middlewares and for the access
+  # log. Every node runs a Traefik pod (topologySpreadConstraints in
+  # deployment.yaml), so no traffic is dropped for want of a local endpoint. Note
+  # that Cilium's L2 announcements require the opposite setting if MetalLB is ever
+  # replaced - see docs/cilium-l2-migration.md.
   externalTrafficPolicy: Local
   ports:
     - name: web
@@ -18,20 +24,3 @@ spec:
       targetPort: 443
   selector:
     app: traefik
-# ---
-# apiVersion: traefik.io/v1alpha1
-# kind: IngressRoute
-# metadata:
-#   name: traefik-ingressroute
-#   namespace: network
-# spec:
-#   entryPoints:
-#     - websecure
-#   routes:
-#     - match: Host(`traefik.tuntelder.com`)
-#       kind: Rule
-#       services:
-#         - name: traefik
-#           port: 8080
-#   tls:
-#     certResolver: letsencrypt

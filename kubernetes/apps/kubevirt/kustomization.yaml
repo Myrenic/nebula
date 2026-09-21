@@ -1,9 +1,13 @@
-# yaml-language-server: $schema=https://json.schemastore.org/kustomization
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:
   - ./namespace.yaml
-  - ./operator/ks.yaml
-  - ./cdi/ks.yaml
-  - ./cdi/namespace.yaml
-  - ./mytops-vm-rbac.yaml
+  - ./operator
+  - ./cdi
+  # Both Namespace objects below are also shipped inside the vendored operator
+  # bundles (operator/base/operator.yaml, cdi/base/operator.yaml), which means two
+  # Flux Kustomizations apply the same object every reconcile. They are only kept
+  # here for the labels the bundles lack; keep the PodSecurity values identical to
+  # the bundle's or the live namespace flips between them every reconcile, and
+  # removing one of the two requires disabling prune on the live object first (see
+  # the comment in namespace.yaml).

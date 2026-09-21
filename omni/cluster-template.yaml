@@ -1,30 +1,29 @@
-# Omni-clustertemplate voor cluster `talos-default`.
+# Omni cluster template for cluster `talos-default`.
 #
-# Dit is de bron van waarheid voor het cluster. Wijzigingen horen hier, niet op
-# de nodes: Omni zet de machineconfig terug naar wat hier staat.
+# This is the source of truth for the cluster. Changes belong here, not on the
+# nodes: Omni resets the machine config to what is in this file.
 #
-# Toepassen vanuit de root van de repo (het manifestpad is relatief aan dit
-# bestand):
+# Apply from the root of the repo (the manifest path is relative to this file):
 #
 #   omnictl cluster template sync --file omni/cluster-template.yaml
 #
-# LET OP: een wijziging aan de machineconfig laat de machines rebooten.
+# NOTE: a change to the machine config makes the machines reboot.
 #
-# De drie machines zijn niet gelijk:
-#   340932a1-…  Proxmox-VM (talos.platform=nocloud), 1 schijf, geen NVMe
-#   4c4c4544-004c-…  bare metal (Dell), heeft /dev/nvme0n1
-#   4c4c4544-0053-…  bare metal (Dell), heeft /dev/nvme0n1
+# The three machines are not equal:
+#   340932a1-…  Proxmox VM (talos.platform=nocloud), 1 disk, no NVMe
+#   4c4c4544-004c-…  bare metal (Dell), has /dev/nvme0n1
+#   4c4c4544-0053-…  bare metal (Dell), has /dev/nvme0n1
 #
-# Daarom staat de NVMe-patch bij de twee Machine-documenten en niet op de
-# control-plane-set: op de VM verwijst hij naar een schijf die er niet is en
-# dat houdt de node uit de lucht.
+# That is why the NVMe patch sits on the two Machine documents and not on the
+# control-plane set: on the VM it points at a disk that is not there, and that
+# keeps the node down.
 kind: Cluster
 name: talos-default
 kubernetes:
   version: v1.36.3
   manifests:
-    # Cilium is de CNI. Flannel gaat uit met de patch hieronder.
-    # one-time: Omni zet dit één keer neer; Cilium beheert zichzelf daarna.
+    # Cilium is the CNI. Flannel is turned off by the patch below.
+    # one-time: Omni applies this once; Cilium manages itself after that.
     - name: cilium
       file: cilium/cilium-install.yaml
       mode: one-time
@@ -41,9 +40,9 @@ patches:
     inline: |
       cluster:
         allowSchedulingOnControlPlanes: true
-  # Flannel eruit, Cilium ervoor in de plaats (zie de manifests hierboven).
-  # Talos v1.13 gebruikt nog deze vorm; vanaf v1.14 is het
-  # kind: KubeFlannelCNIConfig met $patch: delete.
+  # Flannel out, Cilium in its place (see the manifests above).
+  # Talos v1.13 still uses this form; from v1.14 it is
+  # kind: KubeFlannelCNIConfig with $patch: delete.
   - idOverride: 600-disable-flannel-cni
     inline: |
       cluster:
@@ -53,7 +52,7 @@ patches:
 ---
 kind: Workers
 ---
-# Proxmox-VM: bewust geen NVMe-patch, die schijf bestaat hier niet.
+# Proxmox VM: deliberately no NVMe patch, that disk does not exist here.
 kind: Machine
 name: 340932a1-baea-49ac-8bc0-282a554e87e6
 ---

@@ -1,0 +1,33 @@
+# Rules that catch real mistakes: indentation, missing final newline, trailing
+# whitespace, duplicate keys, YAML 1.1 truthiness (yes/no/on/off) and comments
+# glued to their content. The three cosmetics below are off on purpose.
+rules:
+  indentation:
+    spaces: 2
+    indent-sequences: true
+  new-line-at-end-of-file: enable
+  trailing-spaces: enable
+  key-duplicates: enable
+  truthy:
+    allowed-values: ['true', 'false']
+  comments:
+    min-spaces-from-content: 1
+  document-start: disable
+  line-length: disable
+  empty-lines: disable
+
+# Vendored and generated files: they must stay byte-identical to what upstream
+# ships, so they are never reformatted here.
+ignore: |
+  kubernetes/apps/kubevirt/operator/base/operator.yaml
+  kubernetes/apps/kubevirt/cdi/base/operator.yaml
+  kubernetes/apps/network/traefik-crds/crds.yaml
+  omni/cilium/cilium-install.yaml
+  kubernetes/apps/services/stalker-stremio/base/src/**
+  # sops writes its own ciphertext blocks with 4-space indentation, so the
+  # indentation rule can never hold for these; re-encrypting them to please a
+  # linter is not a trade worth making.
+  **/*.sops.yaml
+  # Workflows are written in GitHub's own convention, which uses flow-style
+  # maps and sequences; the indentation rule would trip on them.
+  .github/workflows/**

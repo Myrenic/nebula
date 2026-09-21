@@ -2,5 +2,11 @@ apiVersion: v1
 kind: Namespace
 metadata:
   name: cdi
+  # Same two-owner situation as the kubevirt namespace next to it: the operator
+  # bundle (cdi/base/operator.yaml) ships a Namespace of its own. No
+  # pod-security label is set here because nothing has established what the CDI
+  # importers need; the bundle does not set one either, so the two do not fight.
+  annotations:
+    kustomize.toolkit.fluxcd.io/prune: disabled
   labels:
     app.kubernetes.io/managed-by: flux
