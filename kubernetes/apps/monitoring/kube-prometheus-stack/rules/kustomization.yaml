@@ -4,4 +4,3 @@ kind: Kustomization
 resources:
   - ../base/prometheusrule-cluster-scaling.yaml
   - ../base/prometheusrule-ingress-health.yaml
-  - ../base/prometheusrule-velero.yaml

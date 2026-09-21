@@ -26,25 +26,33 @@ Notes:
 - The `GitRepository` clones `https://github.com/myrenic/nebula` anonymously (the repo is public). No deploy key is involved; if the repo ever becomes private, switch the URL in `kubernetes/apps/flux-system/flux-instance/gotk-sync.yaml` to `ssh://git@github.com/myrenic/nebula` and apply a decrypted `flux-system` deploy-key secret manually.
 - `kubernetes/apps/flux-system/flux-instance/flux-system-secret.sops.yaml` is kept only as an encrypted backup of the old deploy key and is not part of any kustomization.
 
-## Infra automation runner
+## Secrets
 
-OpenTofu automation runs on a self-hosted GitHub Actions runner deployed in-cluster by Flux (`kubernetes/apps/dev-platform/github-runner`).
-Pull requests that touch `infrastructure/**` or `kubernetes/**` now run changed-stack OpenTofu validation, provisioning syntax checks, and `kustomize build` before merge.
+All cluster secrets live in **`kubernetes/apps/common/cluster-secrets.sops.yaml`** (Secret `cluster-secrets` in `flux-system`). Workloads consume them in one of two ways:
 
-Create the GitHub token secret used by ARC (runner registration/auth) in `flux-system`:
+- Flux `postBuild.substituteFrom` injects `${VAR}` placeholders in manifests at build time (see `kubernetes/apps/services/chacdn/base/chacdn-turn.yaml` for an example). The rendered object holds the real value; git holds only the placeholder.
+- Apps that read a whole secret (`envFrom`, `existingSecret`) reference the secret directly.
 
-```bash
-kubectl -n flux-system create secret generic arc-github-auth \
-  --from-literal=github_token='<github_pat_with_repo_admin_scope>'
-```
+Rules for adding a secret:
 
-The runner mounts `sops-age` directly from `flux-system`, so `terraform/infra.json` decryption stays in-cluster and does not require passing the age key through GitHub secrets.
+1. Add the key to `cluster-secrets.sops.yaml` with `sops set '["stringData"]["KEY"]' '"value"' kubernetes/apps/common/cluster-secrets.sops.yaml`.
+2. Never commit a plaintext value. A file named `*.sops.yaml` **must** contain a `sops:` block and `ENC[` values; CI enforces this (the `sops audit` job).
+
+## CI
+
+`.github/workflows/validate-changes.yaml` runs on GitHub-hosted runners and gates every PR that touches `kubernetes/**`:
+
+- `kubectl kustomize kubernetes/apps` and `kubernetes/bootstrap` must build.
+- Every `*.sops.yaml` under `kubernetes/` must be encrypted.
+- Every `IngressRoute` in `kubernetes/apps/network/ingressroutes` must either carry an authentication middleware (`oauth2-proxy-auth` / `lan-only`) or explicitly declare `testlab.io/exposure: public`.
+
+`.github/workflows/renovate.yml` runs Renovate for `flux`, `kubernetes` and `github-actions` dependencies.
 
 ## HA PDCA Loop
 
 Target for this homelab is not strict 100% uptime; it is predictable self-healing after failures.
 
-- **Plan (weekly + after major changes):** pick 2-3 critical apps, confirm Longhorn replica policy matches risk, and ensure Velero backups are recent (`velero backup get`).
+- **Plan (weekly + after major changes):** pick 2-3 critical apps, confirm the Longhorn replica policy matches risk, and confirm a stateful app survives a pod reschedule.
 - **Do (monthly drill):** run the 2-of-3 node failure drill below and capture timing/results in your ops notes.
 - **Check (after each drill/change):** verify Flux reconciliation is clean, Longhorn volumes rebuild, and critical apps recover without manual YAML edits.
 - **Act (same day):** adjust Helm values/replica placement/backup schedules, commit to Git, and let Flux apply. Re-run the drill on the next cadence.
@@ -56,10 +64,10 @@ Repeat cadence: **weekly Plan/Check**, **monthly Do drill**, and **immediately a
 1. **Pre-check**
    - `kubectl get nodes`
    - `flux get kustomizations -A`
-   - `velero backup get | head`
+   - `kubectl -n storage get volumes.longhorn.io | head` — note healthy/degraded counts.
    - Confirm at least one stateless app and one stateful app (Longhorn PVC) are healthy.
 2. **Create a restore point**
-   - `velero backup create pre-ha-drill-$(date +%Y%m%d%H%M) --wait`
+   - There is currently **no cluster backup layer** (see [Backups](#backups)), so the restore point is the Longhorn replica set plus the current git revision. Record `git rev-parse HEAD` and the volume state before draining.
 3. **Simulate failure**
    - Pick two nodes to take offline.
    - `kubectl cordon <node-a> <node-b>`
@@ -70,173 +78,50 @@ Repeat cadence: **weekly Plan/Check**, **monthly Do drill**, and **immediately a
    - Expect degraded capacity/performance, but no prolonged manual babysitting for healthy workloads.
 5. **Verify self-healing (10-15 min window)**
    - `kubectl get pods -A -o wide`
-   - `kubectl get volumes -n longhorn-system`
+   - `kubectl -n storage get volumes.longhorn.io`
    - Check critical app endpoints and confirm Flux is still reconciling.
 6. **Rollback / recovery**
    - Power nodes back on, then `kubectl uncordon <node-a> <node-b>`.
    - Wait for Longhorn replica rebuild and pods to rebalance.
-   - If a stateful app does not recover automatically, use the app restore procedure in **Restore an individual app**.
 
-## Restore from Backup
+## Backups
 
-Velero backs up to Azure Blob Storage (`velero76b1f66a064d` / container `velero`).
-Daily backups are staggered at 03:00, 03:10, 03:20, and 03:40 (7-day retention).
-Monthly backups are staggered at 05:00, 05:10, 05:20, and 05:40 on the 1st (60-day retention).
-Backup operations are available in the Velero UI via `https://backups.${SECRET_DOMAIN_0}` (OAuth2-protected).
+**There is no backup layer right now.** Velero (with an Azure Blob storage location) was removed after its `backupstoragelocation/default` sat in `Unavailable` for weeks — every scheduled backup had been failing, so it was a false sense of safety rather than a backup. The manifests, the nightly schedules, the restore runbook and the `backups.${SECRET_DOMAIN_0}` route are gone with it.
 
-Velero is hardened to self-heal after host trouble:
+What that means in practice:
 
-- `velero` runs **2 replicas with hard node anti-affinity/topology spread**, so one flaky node should not take out both backup controllers.
-- `velero-ui` runs **2 replicas with hard node spread and a long startup probe**, so slow cold starts after a reboot do not turn into a liveness-loop.
-- Flux/Helm are allowed a longer timeout for `velero-ui`, because a cold reboot can
-  legitimately leave it warming up for **10-15 minutes** before it becomes Ready.
+- State lives on Longhorn volumes with `numberOfReplicas: 2` (see [Storage](#storage)); a node loss is survivable, a volume corruption or a bad `kubectl delete` is not.
+- Deleted objects are only recoverable from git if they are managed by Flux.
+- Do not run the failure drill expecting a restore path.
 
-### Check Velero after a host reboot
+If a backup layer comes back, it must:
 
-Use the backup storage location as the source-of-truth signal:
+1. Prove `Available` on the storage location before it is trusted — that status, not pod readiness, is the signal.
+2. Be verified by an actual restore of one app into a scratch namespace, not by a successful backup run.
+3. Keep credentials out of git (SOPS) and out of the admission path of the apps it protects.
 
-```bash
-kubectl get pods -n velero -o wide
-kubectl get deploy -n velero velero velero-ui
-kubectl get backupstoragelocation/default -n velero
-```
+## Storage
 
-If `STATUS.phase=Available`, backups/restores are usable even if one replica is still
-coming back. **Do not wait for every Velero pod to become Ready** during cluster
-recovery; with hard anti-affinity, the second replica can stay `Pending` until another
-node is schedulable again.
+Longhorn runs with `defaultReplicaCount: 1` and `defaultClassReplicaCount: 1`; the `longhorn-2-replicas` StorageClass is used where a second copy is required. The `longhorn-replica-adjuster` CronJob converges existing volumes to 2 replicas once at least two nodes are `Ready` (`frigate-media` is deliberately excluded), and back to 1 while the cluster is effectively single-node. StorageClasses use `volumeBindingMode: WaitForFirstConsumer` so replicas are placed after the pod is scheduled.
 
-If Velero or the UI is still unhealthy after ~20 minutes on a healthy cluster:
+Longhorn volumes use `reclaimPolicy: Retain`, so a deleted PVC leaves a released `volumes.longhorn.io` object behind. Clean those up deliberately:
 
 ```bash
-flux reconcile kustomization velero -n flux-system --with-source
-flux reconcile kustomization velero-ui -n flux-system --with-source
-
-kubectl rollout restart deployment/velero -n velero
-kubectl rollout restart deployment/velero-ui -n velero
-
-kubectl wait --for=jsonpath='{.status.phase}'=Available backupstoragelocation/default \
-  -n velero --timeout=300s
+kubectl -n storage get pv | grep Released
 ```
 
-Useful diagnostics:
+## Access model
+
+Traefik terminates TLS with the cert-manager certificate `domain-0-prod` (Cloudflare DNS-01) and is the only LoadBalancer service (`10.0.50.4`, MetalLB L2 pool `10.0.50.4-10.0.50.6`).
+
+Authentication is `oauth2-proxy` in front of Keycloak (OIDC). Exposure is explicit: every `IngressRoute` either carries `oauth2-proxy-auth` (SSO), `lan-only` (RFC1918 source ranges), or `testlab.io/exposure: public` with a reason in a comment. CI enforces that a route is never accidentally public.
+
+## Restore an individual app from git
+
+Deleting an object and letting Flux reconcile it back is the normal path:
 
 ```bash
-kubectl logs -n velero deployment/velero --tail=200
-kubectl logs -n velero deployment/velero-ui --previous --tail=200
-kubectl describe pod -n velero -l app.kubernetes.io/instance=velero-ui
+flux reconcile kustomization <app> -n flux-system --with-source
 ```
 
-### Restore an individual app (e.g. aiostreams)
-
-This is the reliable procedure for restoring a single app's PVC data. Velero uses
-kopia (pod volume backup) and **requires the pod to start with a `restore-wait` init
-container** that it injects at restore time. If the Deployment creates a pod first,
-the kopia restore will stall. Follow these steps to avoid that.
-
-```bash
-APP=aiostreams
-NS=services
-
-# 1. Suspend Flux so it doesn't fight the restore
-flux suspend kustomization $APP -n flux-system
-flux suspend helmrelease $APP -n $NS
-
-# 2. Scale down and delete the Deployment entirely (prevents Deployment from
-#    recreating a pod before Velero can inject the restore-wait init container)
-kubectl scale deployment $APP -n $NS --replicas=0
-kubectl delete deployment $APP -n $NS
-
-# 3. Delete the PVC so Velero recreates it fresh
-kubectl delete pvc $APP -n $NS
-
-# 4. Find the backup to restore from
-velero backup get | grep $APP
-
-# 5. Check the real Velero health signal. If the backup storage location stays
-#    Unavailable for >10 minutes after the cluster is otherwise healthy, force
-#    a reconcile and restart the deployment.
-kubectl get backupstoragelocation/default -n velero
-# If PHASE != Available for >10m:
-flux reconcile kustomization velero -n flux-system --with-source
-kubectl rollout restart deployment/velero -n velero
-kubectl wait --for=jsonpath='{.status.phase}'=Available backupstoragelocation/default \
-  -n velero --timeout=300s
-
-# 6. Run the restore — do NOT use --existing-resource-policy update, as that
-#    causes Velero to update the existing Deployment instead of creating the pod
-#    directly (which breaks the restore-wait init container injection)
-velero restore create --from-backup <backup-name> --wait
-
-# 7. Monitor: Velero creates the PVC, then a pod with the restore-wait init
-#    container, the node-agent restores kopia data, then the app starts
-kubectl get pods -n $NS -w
-
-# 8. Resume Flux once the pod is Running
-flux resume kustomization $APP -n flux-system
-flux resume helmrelease $APP -n $NS
-```
-
-### Troubleshooting restore issues
-
-**Restore stuck in `New` phase (rare)**
-
-If a restore stays in `New` for more than ~5 minutes with no activity in
-`kubectl logs -n velero deployment/velero`, recycle the deployment:
-
-```bash
-kubectl rollout restart deployment/velero -n velero
-```
-
-The new pods pick up in-flight `New` restores immediately.
-
-**BSL shows `Unavailable` (`input/output error` writing credentials)**
-
-The Azure plugin writes a temp credential file to `/tmp` inside the velero container.
-Velero now runs with two replicas and hard node spread, so a single unhealthy node
-usually self-recovers without intervention. If BSL is still not `Available` after
-~10 minutes on an otherwise healthy cluster, reconcile and restart:
-
-```bash
-flux reconcile kustomization velero -n flux-system --with-source
-kubectl rollout restart deployment/velero -n velero
-kubectl wait --for=jsonpath='{.status.phase}'=Available backupstoragelocation/default \
-  -n velero --timeout=300s
-```
-
-**Velero UI stuck in `CrashLoopBackOff` after a host reboot**
-
-The UI now runs two replicas with a startup probe, so it should tolerate slow cold
-starts while the cluster API and Velero settle. A cold reboot can still leave it
-warming up for 10-15 minutes. If both replicas stay unavailable for more than
-~20 minutes:
-
-```bash
-flux reconcile kustomization velero-ui -n flux-system --with-source
-kubectl rollout restart deployment/velero-ui -n velero
-kubectl logs -n velero deployment/velero-ui --previous --tail=200
-```
-
-**Kopia PodVolumeRestore stuck / `shouldProcess` returns false**
-
-Velero's advanced kopia controller skips a PVR if the target pod is not running the
-`restore-wait` init container. This happens when:
-- `--existing-resource-policy update` was used (Deployment updates instead of Velero creating the pod)
-- The pod was force-deleted before the restore completed
-
-**Fix:** delete the restore, delete the Deployment and PVC, and re-run without
-`--existing-resource-policy update` (step 6 above).
-
-### Full-cluster restore (disaster recovery)
-
-```bash
-# 1. Bootstrap Flux (steps 1–4 in Bootstrap section above)
-# 2. Wait for the backup storage location to come back
-kubectl wait --for=jsonpath='{.status.phase}'=Available backupstoragelocation/default \
-  -n velero --timeout=300s
-# 3. List backups and pick one
-velero backup get
-# 4. Restore
-velero restore create --from-backup <backup-name> --wait
-velero restore describe <restore-name> --details
-```
+Flux only restores what is in git — data on PVCs is not part of that. When a PVC is deleted, the app comes back with an empty volume.

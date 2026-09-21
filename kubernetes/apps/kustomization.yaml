@@ -7,7 +7,6 @@ resources:
   - network
   - storage
   - kubevirt
-  - backup
   - services
   - auth
   - monitoring
