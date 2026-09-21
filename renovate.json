@@ -11,12 +11,17 @@
   "separateMajorMinor": true,
   "packageRules": [
     {
-      "description": "Automerge dependency updates (digest, pin, patch, minor) with no human in the loop. platformAutomerge stays false on purpose: with it on, GitHub merges as soon as the repository's *required* checks pass, and this repository deliberately has none - so a bump would land before the validation that .github/workflows/validate-renovate.yaml runs. With it off, Renovate itself merges on a later run, once the branch carries a green renovate/validate status.",
+      "description": "Automerge the small stuff (digest, pin, patch) with no human in the loop - a version bump inside the same release line. platformAutomerge stays false on purpose: with it on, GitHub merges as soon as the repository's *required* checks pass, and this repository deliberately has none - so a bump would land before the validation that .github/workflows/validate-renovate.yaml runs. With it off, Renovate itself merges on a later run, once the branch carries a green renovate/validate status.",
       "matchManagers": ["flux", "kubernetes", "github-actions"],
-      "matchUpdateTypes": ["digest", "pin", "patch", "minor"],
+      "matchUpdateTypes": ["digest", "pin", "patch"],
       "automerge": true,
       "automergeType": "pr",
       "platformAutomerge": false
+    },
+    {
+      "description": "Minor updates are not automerged: for the charts this cluster runs (longhorn, metallb, cert-manager, oauth2-proxy) a minor bump changes defaults and upgrades running components, and the validation these branches get is shape-only - it renders and lints, it does not exercise a volume or a webhook. They wait as pull requests. To automate them too, add \"minor\" to the matchUpdateTypes above.",
+      "matchUpdateTypes": ["minor"],
+      "automerge": false
     },
     {
       "description": "Major updates change defaults and are read by a human, always. Errors and alerts from these changes are not something the cluster should discover on its own.",
