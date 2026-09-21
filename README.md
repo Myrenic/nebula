@@ -220,29 +220,58 @@ delete-then-create and a PUT is answered with 403; and the Longhorn CRs live in
 
 ## CI and local checks
 
-Every change that touches `kubernetes/**`, `omni/**`, `scripts/**`, `.github/**`,
-`.sops.yaml`, `.yamllint`, `.editorconfig` or `README.md` runs:
+The gates live in **`scripts/validate.sh`**, so "checked" means one thing whether it
+runs against a hand-written change or a dependency bump:
 
 | Gate | What it catches |
 | --- | --- |
 | Kustomize builds | `kubernetes/apps` and `kubernetes/bootstrap` must render |
 | Flux path builds | every `spec.path` a Kustomization points at must render on its own |
 | Orphan manifests | a YAML file under `kubernetes/` that no kustomization references is silently never applied; a file that is deliberately never applied declares it in its own first lines (`# not-applied: <reason>`) |
-| kubeconform | schema errors on standard resources, with CRDs ignored rather than failing |
-| yamllint | indentation, trailing whitespace, missing final newline |
 | SOPS audit | a `*.sops.yaml` without a `sops:` block or `ENC[` values |
 | Plaintext secrets | secret-looking literals in manifests |
 | Exposure | a route with neither an auth middleware nor an explicit public annotation |
+| yamllint | indentation, trailing whitespace, missing final newline |
+| kubeconform | schema errors on standard resources, with CRDs ignored rather than failing |
 
-Locally, everything except kubeconform is one command:
+Run the whole suite locally - it needs `kubectl`, `git`, `python3`, `yamllint` and
+`kubeconform`, and says so loudly if one is missing rather than skipping a gate:
 
 ```bash
-bash scripts/check-manifests.sh      # roots + every Flux path + orphan report
-yamllint -c .yamllint .
-kubectl kustomize kubernetes/apps >/dev/null
+scripts/validate.sh
 ```
 
-Flux in-cluster checks its own health, so after a push:
+Two workflows call it:
+
+- **`validate-changes.yaml`** - a push to `main`, and human pull requests.
+- **`validate-renovate.yaml`** - every branch Renovate proposes, run when the
+  Renovate workflow finishes. It validates **main + that branch** (the tree that
+  would land), and reports the result as a `renovate/validate` commit status on the
+  branch head.
+
+### Why dependency PRs need their own workflow
+
+A pull request opened by `GITHUB_TOKEN` gets its `pull_request` runs held as
+`action_required`: GitHub waits for a human to approve the run, which for an
+unattended dependency flow means the checks never run. `workflow_run` is not held,
+so that is what drives the validation above. Consequences worth knowing:
+
+- Dependency PRs show the validation as a `renovate/validate` status; their
+  `Validate Changes` run sits at `action_required` until somebody clicks *Approve and
+  run workflows*. Adding a `RENOVATE_TOKEN` (fine-grained PAT or GitHub App) to the
+  Renovate workflow makes PRs trigger CI normally as well - the workflow already
+  prefers it when it exists.
+- Each branch is marked `pending` before it is validated, so a validator that dies
+  halfway leaves the branch pending instead of looking green. Nothing merges on an
+  unvalidated branch.
+- `renovate.json` automerges digest/pin/patch/minor **with `platformAutomerge:
+  false`**: leaving that on would let GitHub merge as soon as the repository's
+  *required* checks pass, and this repository deliberately has none, so a bump would
+  land before the validation finished. With it off, Renovate merges on a later run
+  once the branch carries a green `renovate/validate`.
+
+Pushing to `main` stays the normal path for hand-written changes. Flux reports its own
+health after a push, so:
 
 ```bash
 flux reconcile kustomization flux-system --with-source

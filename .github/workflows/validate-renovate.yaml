@@ -1,0 +1,94 @@
+name: Validate Renovate
+
+# Checks the branches Renovate proposes, in the repository's own context, without
+# anybody approving a workflow run.
+#
+# Why not `pull_request`: a PR opened with GITHUB_TOKEN gets its pull_request runs
+# held as `action_required` - GitHub waits for a human click before starting them.
+# For an automatic dependency flow that is the same as having no CI at all, and it
+# is why these checks are driven by workflow_run instead: that event is not held.
+#
+# Each branch is validated as main + that branch, with scripts/validate.sh - the
+# same gates a hand-written change gets - and the result is reported as a
+# `renovate/validate` commit status on the branch head. A branch is marked pending
+# before it is checked, so a validator that dies halfway leaves the branch pending
+# rather than looking green.
+on:
+  workflow_run:
+    workflows: [Renovate]
+    types: [completed]
+  workflow_dispatch:
+
+permissions:
+  contents: read # read the branches
+  statuses: write # report renovate/validate
+
+concurrency:
+  group: validate-renovate
+  cancel-in-progress: true
+
+jobs:
+  branches:
+    name: Renovate branches
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # the script fetches and walks the renovate refs
+
+      - uses: azure/setup-kubectl@v4
+        with:
+          version: v1.36.3
+
+      - name: Install yamllint
+        run: |
+          python3 -m venv "$RUNNER_TEMP/yamllint"
+          "$RUNNER_TEMP/yamllint/bin/pip" install --quiet yamllint==1.38.0
+          echo "$RUNNER_TEMP/yamllint/bin" >>"$GITHUB_PATH"
+
+      - name: Install kubeconform
+        run: |
+          curl -sSfL -o "$RUNNER_TEMP/kubeconform.tar.gz" \
+            https://github.com/yannh/kubeconform/releases/download/v0.7.0/kubeconform-linux-amd64.tar.gz
+          tar -xzf "$RUNNER_TEMP/kubeconform.tar.gz" -C "$RUNNER_TEMP" kubeconform
+          echo "$RUNNER_TEMP" >>"$GITHUB_PATH"
+
+      - name: Mark every branch pending
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          scripts/check-renovate-branches.sh --list | while IFS=$'\t' read -r branch sha; do
+            [ -n "${branch:-}" ] || continue
+            echo "pending: $branch"
+            gh api -X POST "repos/$GITHUB_REPOSITORY/statuses/$sha" \
+              -f state=pending \
+              -f context=renovate/validate \
+              -f description="validating" \
+              -f target_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" >/dev/null
+          done
+
+      - name: Validate every branch
+        run: scripts/check-renovate-branches.sh --out "$RUNNER_TEMP/branches.tsv"
+
+      - name: Report the results as commit statuses
+        if: always()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ ! -s "$RUNNER_TEMP/branches.tsv" ]; then
+            echo "::error::no branch results were produced; branches stay pending"
+            exit 1
+          fi
+          failed=0
+          while IFS=$'\t' read -r branch sha state detail; do
+            [ -n "${branch:-}" ] || continue
+            if [ "$state" = PASS ]; then status=success; else status=failure; failed=1; fi
+            gh api -X POST "repos/$GITHUB_REPOSITORY/statuses/$sha" \
+              -f state="$status" \
+              -f context=renovate/validate \
+              -f description="$(printf '%s' "$detail" | cut -c1-130)" \
+              -f target_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" >/dev/null
+          done <"$RUNNER_TEMP/branches.tsv"
+          exit "$failed"

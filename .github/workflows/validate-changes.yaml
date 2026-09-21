@@ -1,5 +1,11 @@
 name: Validate Changes
 
+# Runs the gate suite on a push to main and on human pull requests. Dependency pull
+# requests are covered by validate-renovate.yaml instead, because a pull_request run
+# raised by GITHUB_TOKEN is held as `action_required` and would need a click.
+#
+# The gates themselves live in scripts/validate.sh so that "checked" means one
+# thing. Run it locally with:  scripts/validate.sh
 on:
   pull_request:
     paths:
@@ -31,8 +37,8 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  kubernetes:
-    name: Kustomize builds
+  validate:
+    name: Gates
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -41,142 +47,16 @@ jobs:
         with:
           version: v1.36.3
 
-      - name: Build kubernetes/apps
-        run: kubectl kustomize kubernetes/apps >/dev/null
-
-      - name: Build kubernetes/bootstrap
-        run: kubectl kustomize kubernetes/bootstrap >/dev/null
-
-  manifests:
-    name: Flux paths and orphans
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: azure/setup-kubectl@v4
-        with:
-          version: v1.36.3
-
-      # Renders every spec.path Flux reconciles and reports manifests that no
-      # kustomization references. Run locally with scripts/check-manifests.sh.
-      - name: Render Flux paths and check for orphans
-        run: scripts/check-manifests.sh
-
-  secrets:
-    name: SOPS audit
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      # Every *.sops.yaml must actually be encrypted. A file named .sops.yaml
-      # without a sops block is a plaintext secret with a reassuring name: that
-      # is how the mytops TURN shared secret ended up in a public repo.
-      - name: Every *.sops.yaml is encrypted
-        run: |
-          set -euo pipefail
-          status=0
-          while IFS= read -r file; do
-            if ! grep -q '^sops:' "$file"; then
-              echo "::error file=$file::missing sops block"
-              status=1
-            fi
-            if ! grep -q 'ENC\[' "$file"; then
-              echo "::error file=$file::no encrypted values (ENC[AES256_GCM...])"
-              status=1
-            fi
-          done < <(git ls-files 'kubernetes/**/*.sops.yaml')
-          exit "$status"
-
-      - name: No secret-looking plaintext in manifests
-        run: |
-          set -euo pipefail
-          status=0
-          while IFS= read -r file; do
-            case "$file" in
-              *.sops.yaml) continue ;;
-            esac
-            # stringData/data blocks that hold a literal (non-placeholder) value
-            if grep -nE '^[[:space:]]+(token|password|passphrase|secret|api[-_]?key|.*_SECRET|.*_TOKEN|.*_KEY):[[:space:]]*"?[A-Za-z0-9+/=_-]{16,}' "$file" >/dev/null; then
-              echo "::error file=$file::looks like a plaintext secret"
-              grep -nE '^[[:space:]]+(token|password|passphrase|secret|api[-_]?key|.*_SECRET|.*_TOKEN|.*_KEY):[[:space:]]*"?[A-Za-z0-9+/=_-]{16,}' "$file" | sed 's/:.*/: <redacted>/'
-              status=1
-            fi
-          done < <(git ls-files 'kubernetes/**/*.yaml')
-          exit "$status"
-
-  exposure:
-    name: Ingress exposure
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      # Exposure must be a decision, not an omission: a route is either behind
-      # an auth middleware or explicitly marked public with a reason. An empty
-      # glob is a failure of its own: it means the directory was moved or the
-      # routes were deleted, which must not read as a pass.
-      - name: Routes are authenticated or explicitly public
-        run: |
-          set -euo pipefail
-          status=0
-          files=(kubernetes/apps/network/exposure/*.yaml)
-          if [ ! -e "${files[0]}" ]; then
-            echo "::error::kubernetes/apps/network/exposure is missing or holds no .yaml files"
-            exit 1
-          fi
-          for file in "${files[@]}"; do
-            grep -q '^kind: IngressRoute' "$file" || continue
-            if grep -qE 'oauth2-proxy-auth|lan-only|testlab\.io/exposure' "$file"; then
-              continue
-            fi
-            echo "::error file=$file::IngressRoute without an auth middleware and without a testlab.io/exposure annotation"
-            status=1
-          done
-          exit "$status"
-
-  yamllint:
-    name: YAML style
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      # Same command a maintainer runs locally, in a throwaway venv so the
-      # runner's system python is left alone:
-      #   python3 -m venv .venv-yamllint && .venv-yamllint/bin/pip install yamllint==1.38.0
-      #   .venv-yamllint/bin/yamllint --config-file .yamllint .
-      - name: Install yamllint
+      # Pinned so CI uses the same releases a maintainer installs locally.
+      - name: Install yamllint and kubeconform
         run: |
           python3 -m venv "$RUNNER_TEMP/yamllint"
           "$RUNNER_TEMP/yamllint/bin/pip" install --quiet yamllint==1.38.0
           echo "$RUNNER_TEMP/yamllint/bin" >>"$GITHUB_PATH"
-
-      - name: Lint YAML
-        run: yamllint --config-file .yamllint .
-
-  kubeconform:
-    name: Manifest schemas
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: azure/setup-kubectl@v4
-        with:
-          version: v1.36.3
-
-      # Pinned so CI validates against the same release a maintainer installs
-      # locally:
-      #   curl -sSfL -o kubeconform.tar.gz https://github.com/yannh/kubeconform/releases/download/v0.7.0/kubeconform-linux-amd64.tar.gz
-      #   tar -xzf kubeconform.tar.gz kubeconform
-      - name: Install kubeconform
-        run: |
           curl -sSfL -o "$RUNNER_TEMP/kubeconform.tar.gz" \
             https://github.com/yannh/kubeconform/releases/download/v0.7.0/kubeconform-linux-amd64.tar.gz
           tar -xzf "$RUNNER_TEMP/kubeconform.tar.gz" -C "$RUNNER_TEMP" kubeconform
           echo "$RUNNER_TEMP" >>"$GITHUB_PATH"
 
-      # -ignore-missing-schemas: the cluster runs CRDs from Flux, Traefik,
-      # Longhorn, KubeVirt, cert-manager and the Prometheus operator, which the
-      # upstream schema registry does not serve; an unknown kind must not fail
-      # this job. -strict is deliberately not set for the same reason: unknown
-      # fields in third-party objects are not this repo's contract.
-      - name: Validate kubernetes/apps
-        run: kubectl kustomize kubernetes/apps | kubeconform -ignore-missing-schemas -summary
+      - name: Validate
+        run: scripts/validate.sh
