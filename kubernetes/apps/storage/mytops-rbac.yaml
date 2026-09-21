@@ -19,6 +19,35 @@ rules:
     resources: ["volumes"]
     verbs: ["get", "list", "delete"]
 ---
+# Cluster-scoped half of the same grant: the idle culler reclaims CDI's import
+# scratch volumes (PVs named pvc-* whose claimRef is prime-<uuid>-scratch and
+# which are Released - CDI deletes the PVC but the storage class retains, so
+# every VM build leaves a 10Gi volume allocated). Finding them means listing
+# PersistentVolumes, which no namespaced Role can do. The culler matches on
+# that scratch pattern only; a workspace disk or a user home volume can never
+# be selected by it.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: mytops-scratch-volumes
+rules:
+  - apiGroups: [""]
+    resources: ["persistentvolumes"]
+    verbs: ["get", "list", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: mytops-scratch-volumes
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: mytops-scratch-volumes
+subjects:
+  - kind: ServiceAccount
+    name: mytops-control
+    namespace: services
+---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
