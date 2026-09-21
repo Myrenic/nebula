@@ -82,10 +82,16 @@ data:
               days: 7
             pre_capture: 5
             post_capture: 5
+          # Event clips only. Any value here retains every segment that
+          # contains motion, and this view has motion almost all day, so the
+          # 50Gi media volume filled at ~3.6GB/h (~16GB/day) until the
+          # recorder hit ENOSPC on 2026-09-19 and silently stopped moving
+          # segments out of /tmp/cache. Alerts/detections above already
+          # retain the window around each person event.
           continuous:
             days: 0
           motion:
-            days: 7
+            days: 0
 
     snapshots:
       enabled: true
