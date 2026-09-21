@@ -55,6 +55,29 @@ spec:
       - name: oauth2-proxy-errors
       - name: oauth2-proxy-forwardauth
 ---
+# Ownership check for mytops workspace streams.
+#
+# The per-workspace IngressRoutes in the mytops repository list this after
+# `oauth2-proxy-auth`, so the request arrives here already authenticated:
+# this asks the workplace API whether the signed-in user owns the host in the
+# request. Authentication alone was the whole gate before, and a workspace host
+# is derived from its owner's email (`ws-<entry>-u<hash>`), so any user in the
+# realm could open anyone's desktop by guessing a URL.
+#
+# trustForwardHeader stays false (the default, so it is explicit here) so
+# Traefik rewrites X-Forwarded-Host from the request's real Host: the API
+# decides on that header, and trusting a client-supplied one would let a caller
+# name someone else's workspace while asking for their own.
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: mytops-workspace-owner
+  namespace: network
+spec:
+  forwardAuth:
+    address: "http://mytops-webui.services.svc.cluster.local/api/stream-auth"
+    trustForwardHeader: false
+---
 # Restricts access to RFC1918 LAN source addresses only
 apiVersion: traefik.io/v1alpha1
 kind: Middleware
