@@ -46,6 +46,13 @@ spec:
             env:
               LIBVA_DRIVER_NAME: iHD
               TZ: "${TZ}"
+              # frigate expands {FRIGATE_*} placeholders inside config.yml from
+              # its environment (frigate/config/env.py), so the MQTT login
+              # lives in the cluster-secrets bundle and never in the
+              # ConfigMap/git. config.yml carries {FRIGATE_MQTT_USERNAME} /
+              # {FRIGATE_MQTT_PASSWORD} for the user/password fields.
+              FRIGATE_MQTT_USERNAME: "${MQTT_USERNAME}"
+              FRIGATE_MQTT_PASSWORD: "${MQTT_PASSWORD}"
             resources:
               requests:
                 cpu: 250m
