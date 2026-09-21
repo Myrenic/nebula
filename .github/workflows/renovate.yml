@@ -25,4 +25,12 @@ jobs:
         uses: renovatebot/github-action@v41.0.14
         with:
           configurationFile: renovate.json
-          token: ${{ secrets.GITHUB_TOKEN }}
+          # GITHUB_TOKEN can open PRs now that the repository setting "Allow GitHub
+          # Actions to create and approve pull requests" is on, but a PR authored by
+          # GITHUB_TOKEN leaves its workflows in `action_required`: CI never runs on
+          # it, so nothing validates the bump and auto-merge cannot be gated on a
+          # check. Create a RENOVATE_TOKEN (fine-grained PAT with contents,
+          # pull-requests, issues and workflows write, or a GitHub App installation
+          # token) and both problems go away; until then dependency PRs are merged by
+          # hand, which is the safer default for a repository that deploys a cluster.
+          token: ${{ secrets.RENOVATE_TOKEN || secrets.GITHUB_TOKEN }}
