@@ -37,6 +37,13 @@ spec:
         type: filesystem
       limits_config:
         retention_period: 336h
+      # retention_period above only marks data as deletable; without the
+      # compactor doing the deleting, Loki keeps every chunk forever and the
+      # 20Gi volume fills up. Loki's own default for retention_enabled is false.
+      compactor:
+        retention_enabled: true
+        delete_request_store: filesystem
+        working_directory: /var/loki/compactor
     singleBinary:
       replicas: 1
       persistence:

@@ -56,6 +56,16 @@ spec:
         replicas: 1
         secrets:
           - telegram-notification
+        # Silences and the notification log survive a pod restart.
+        storage:
+          volumeClaimTemplate:
+            spec:
+              storageClassName: longhorn-2-replicas
+              accessModes:
+                - ReadWriteOnce
+              resources:
+                requests:
+                  storage: 2Gi
         resources:
           requests:
             cpu: 50m
@@ -88,9 +98,13 @@ spec:
             - receiver: "null"
               matchers:
                 - alertname =~ "Watchdog|InfoInhibitor"
+            # Warnings used to fall through to the "null" receiver and were
+            # silently dropped, so every severity: warning rule in this repo
+            # (node pressure, missing ingress probes, ...) could never notify
+            # anyone.
             - receiver: telegram
               matchers:
-                - severity = "critical"
+                - severity =~ "critical|warning"
         receivers:
           - name: "null"
           - name: telegram
@@ -104,6 +118,17 @@ spec:
       prometheusSpec:
         replicas: 1
         retention: 7d
+        # Without this Prometheus runs on an emptyDir: 7 days of retention is
+        # lost on every pod restart, host reboot included.
+        storageSpec:
+          volumeClaimTemplate:
+            spec:
+              storageClassName: longhorn-2-replicas
+              accessModes:
+                - ReadWriteOnce
+              resources:
+                requests:
+                  storage: 10Gi
         ruleSelectorNilUsesHelmValues: false
         resources:
           requests:

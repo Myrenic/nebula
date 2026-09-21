@@ -15,4 +15,3 @@ spec:
       name: "*"
   exclusionList:
     - ".*upgrade retries exhausted.*"
-  suspend: true

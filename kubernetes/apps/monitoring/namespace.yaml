@@ -5,4 +5,5 @@ metadata:
   annotations:
     kustomize.toolkit.fluxcd.io/prune: disabled
   labels:
+    # privileged on purpose: node-exporter uses hostNetwork and hostPath mounts (/proc, /sys, /var/lib).
     pod-security.kubernetes.io/enforce: privileged

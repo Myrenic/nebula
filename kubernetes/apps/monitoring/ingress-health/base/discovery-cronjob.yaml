@@ -1,3 +1,8 @@
+# This CronJob is the single owner of the `Probe` object `ingress-health`:
+# it is generated from Traefik's route table every 15 minutes with
+# `kubectl apply` straight at the API server. It deliberately does not live in
+# git - it used to be declared here as well, and Flux kept resetting the target
+# list to the single placeholder target on every reconcile.
 ---
 apiVersion: v1
 kind: ConfigMap
@@ -112,7 +117,11 @@ spec:
           restartPolicy: OnFailure
           containers:
             - name: discover
-              image: docker.io/bitnami/kubectl:latest
+              # Same image as the other in-cluster kubectl jobs; Bash is
+              # present (the script uses bashisms on purpose).
+              # Was bitnami/kubectl:latest: unpinned, and no longer published in
+              # Bitnami's free catalog.
+              image: alpine/k8s:1.36.0
               command:
                 - /bin/bash
                 - /scripts/discover.sh
