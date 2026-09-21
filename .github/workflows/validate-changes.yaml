@@ -45,7 +45,7 @@ jobs:
 
       # Every *.sops.yaml must actually be encrypted. A file named .sops.yaml
       # without a sops block is a plaintext secret with a reassuring name: that
-      # is how the chacdn TURN shared secret ended up in a public repo.
+      # is how the shacdn TURN shared secret ended up in a public repo.
       - name: Every *.sops.yaml is encrypted
         run: |
           set -euo pipefail

@@ -5,8 +5,8 @@ resources:
   - ./aiostreams.yaml
   - ./catch-all.yaml
   - ./certificate.yaml
-  - ./chacdn.yaml
-  - ./control.yaml
+  - ./shacdn.yaml
+  - ./shacdn-control.yaml
   - ./flux-operator.yaml
   - ./frigate.yaml
   - ./grafana.yaml

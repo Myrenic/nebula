@@ -1,3 +1,7 @@
+# The app (FastAPI service, workers, SPA, migrations) lives in
+# https://github.com/Myrenic/mushroom-finder. Everything platform-side stays
+# here: this Kustomization, the ingress route in network/ingressroutes, the
+# cluster-secrets substitution and the Longhorn dependency.
 apiVersion: kustomize.toolkit.fluxcd.io/v1
 kind: Kustomization
 metadata:
@@ -9,10 +13,10 @@ spec:
   retryInterval: 1m
   timeout: 5m
   prune: true
-  path: ./kubernetes/apps/services/mushroom-finder/base
+  path: ./base
   sourceRef:
     kind: GitRepository
-    name: flux-system
+    name: mushroom-finder
     namespace: flux-system
   postBuild:
     substituteFrom:

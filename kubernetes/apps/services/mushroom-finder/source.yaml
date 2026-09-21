@@ -1,0 +1,11 @@
+# App source lives in its own repository; this file is what makes Flux read it.
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: GitRepository
+metadata:
+  name: mushroom-finder
+  namespace: flux-system
+spec:
+  interval: 1m
+  ref:
+    branch: main
+  url: https://github.com/Myrenic/mushroom-finder

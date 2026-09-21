@@ -1,0 +1,27 @@
+# Network-namespace half of the shacdn control RBAC: allows the webui's
+# kubectl-proxy sidecar (SA shacdn-control in services) to create/delete the
+# per-user IngressRoutes that route to per-user workspace pods. Lives here
+# because the shacdn Kustomization forces targetNamespace=services.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: shacdn-control
+  namespace: network
+rules:
+  - apiGroups: ["traefik.io"]
+    resources: ["ingressroutes"]
+    verbs: ["get", "list", "create", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: shacdn-control
+  namespace: network
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: shacdn-control
+subjects:
+  - kind: ServiceAccount
+    name: shacdn-control
+    namespace: services

@@ -1,8 +1,0 @@
-# De API is alleen-lezen en heeft geen Kubernetes-toegang meer. Wat overblijft
-# is het account voor de worker-Jobs: geen rechten, geen token.
-apiVersion: v1
-kind: ServiceAccount
-metadata:
-  name: mushroom-finder-worker
-  namespace: services
-automountServiceAccountToken: false

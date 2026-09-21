@@ -30,13 +30,33 @@ Notes:
 
 All cluster secrets live in **`kubernetes/apps/common/cluster-secrets.sops.yaml`** (Secret `cluster-secrets` in `flux-system`). Workloads consume them in one of two ways:
 
-- Flux `postBuild.substituteFrom` injects `${VAR}` placeholders in manifests at build time (see `kubernetes/apps/services/chacdn/base/chacdn-turn.yaml` for an example). The rendered object holds the real value; git holds only the placeholder.
+- Flux `postBuild.substituteFrom` injects `${VAR}` placeholders in manifests at build time (see `kubernetes/apps/cert-manager/cert-manager/issuers/cloudflare-issuer-secret.yaml` for an example). The rendered object holds the real value; git holds only the placeholder. App repositories listed below use the same mechanism with this cluster's `cluster-secrets`.
 - Apps that read a whole secret (`envFrom`, `existingSecret`) reference the secret directly.
 
 Rules for adding a secret:
 
 1. Add the key to `cluster-secrets.sops.yaml` with `sops set '["stringData"]["KEY"]' '"value"' kubernetes/apps/common/cluster-secrets.sops.yaml`.
 2. Never commit a plaintext value. A file named `*.sops.yaml` **must** contain a `sops:` block and `ENC[` values; CI enforces this (the `sops audit` job).
+
+## App repositories
+
+Two apps keep their own code and manifests, outside this repository:
+
+| App | Repository | URL | Consumed by |
+| --- | --- | --- | --- |
+| shacdn | `Myrenic/shacdn` | `https://apps.${SECRET_DOMAIN_0}` | `kubernetes/apps/services/shacdn/` |
+| mushroom-finder | `Myrenic/mushroom-finder` | `https://mushrooms.${SECRET_DOMAIN_0}` | `kubernetes/apps/services/mushroom-finder/` |
+
+Each directory here contains only the deployment contract - a `GitRepository` (`source.yaml`) plus a `Kustomization` (`ks.yaml`) that points at `./base` in that repository, sets `targetNamespace` and substitutes `${...}` from `cluster-secrets`. Their own CI builds the manifests, rebuilds the generated ConfigMap bundles and asserts they are committed (`git diff --exit-code`), and Renovate runs there too.
+
+What stays here, because it is platform rather than app:
+
+- ingress routes and the auth chain (`network/ingressroutes/`), including the cross-namespace control RBAC for shacdn
+- the `storage/shacdn-rbac.yaml` grant for deleting Longhorn volumes during VM teardown (it must live in a Kustomization without `targetNamespace`, otherwise the namespace is overridden and the grant lands in the wrong namespace)
+- the secrets themselves (`cluster-secrets`), which the app repositories only reference by placeholder
+
+The Keycloak realm for both apps is `shacdn`.
+
 
 ## CI
 

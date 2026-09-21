@@ -1,0 +1,41 @@
+# RBAC for the workplace API to manage KubeVirt VMs and CDI DataVolumes
+# in the kubevirt namespace. Same SA as the workspace containers (shacdn-control).
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: shacdn-vm-control
+  namespace: kubevirt
+rules:
+  - apiGroups: ["kubevirt.io"]
+    resources: ["virtualmachines", "virtualmachineinstances"]
+    verbs: ["get", "list", "watch", "create", "patch", "delete"]
+  - apiGroups: ["cdi.kubevirt.io"]
+    resources: ["datavolumes"]
+    verbs: ["get", "list", "watch", "create", "delete"]
+  - apiGroups: [""]
+    resources: ["services"]
+    verbs: ["get", "list", "create", "delete"]
+  # Cloud-init user-data exceeds the 2048-byte inline limit, so it lives in a
+  # Secret referenced by cloudInitNoCloud.userDataSecretRef.
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["get", "create", "delete"]
+  # Destroy drops the VM disk (DataVolume cascade); the PVC needs explicit
+  # delete, else longhorn retains the volume forever (destroy leftovers).
+  - apiGroups: [""]
+    resources: ["persistentvolumeclaims"]
+    verbs: ["get", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: shacdn-vm-control
+  namespace: kubevirt
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: shacdn-vm-control
+subjects:
+  - kind: ServiceAccount
+    name: shacdn-control
+    namespace: services

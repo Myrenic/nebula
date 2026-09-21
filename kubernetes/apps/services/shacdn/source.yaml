@@ -1,0 +1,12 @@
+# App source lives in its own repository; this file is what makes Flux read it.
+# The manifests are deployed by ks.yaml (path ./base), not by this GitRepository.
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: GitRepository
+metadata:
+  name: shacdn
+  namespace: flux-system
+spec:
+  interval: 1m
+  ref:
+    branch: main
+  url: https://github.com/Myrenic/shacdn
