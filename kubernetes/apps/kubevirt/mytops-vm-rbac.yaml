@@ -14,17 +14,19 @@ rules:
     verbs: ["get", "list", "watch", "create", "delete"]
   - apiGroups: [""]
     resources: ["services"]
-    verbs: ["get", "list", "create", "delete"]
+    # watch: the idle culler deletes these with kubectl, which watches the
+    # object to confirm the delete.
+    verbs: ["get", "list", "watch", "create", "delete"]
   # Cloud-init user-data exceeds the 2048-byte inline limit, so it lives in a
   # Secret referenced by cloudInitNoCloud.userDataSecretRef.
   - apiGroups: [""]
     resources: ["secrets"]
-    verbs: ["get", "create", "delete"]
+    verbs: ["get", "list", "watch", "create", "delete"]
   # Destroy drops the VM disk (DataVolume cascade); the PVC needs explicit
   # delete, else longhorn retains the volume forever (destroy leftovers).
   - apiGroups: [""]
     resources: ["persistentvolumeclaims"]
-    verbs: ["get", "delete"]
+    verbs: ["get", "list", "watch", "delete"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding

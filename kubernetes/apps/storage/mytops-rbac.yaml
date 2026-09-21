@@ -17,7 +17,10 @@ metadata:
 rules:
   - apiGroups: ["longhorn.io"]
     resources: ["volumes"]
-    verbs: ["get", "list", "delete"]
+    # watch: kubectl watches the object to confirm its delete, and the culler
+    # deletes these; without it its log fills with "cannot watch resource"
+    # errors that read like permission failures.
+    verbs: ["get", "list", "watch", "delete"]
 ---
 # Cluster-scoped half of the same grant: the idle culler reclaims CDI's import
 # scratch volumes (PVs named pvc-* whose claimRef is prime-<uuid>-scratch and
@@ -33,7 +36,7 @@ metadata:
 rules:
   - apiGroups: [""]
     resources: ["persistentvolumes"]
-    verbs: ["get", "list", "delete"]
+    verbs: ["get", "list", "watch", "delete"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
