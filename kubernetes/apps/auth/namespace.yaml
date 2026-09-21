@@ -5,4 +5,7 @@ metadata:
   annotations:
     kustomize.toolkit.fluxcd.io/prune: disabled
   labels:
-    pod-security.kubernetes.io/enforce: privileged
+    # Keycloak, its Postgres and oauth2-proxy all run as ordinary pods with
+    # dropped capabilities (verified against the running pods), so this
+    # namespace does not need to be exempt from the baseline policy.
+    pod-security.kubernetes.io/enforce: baseline

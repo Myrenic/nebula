@@ -5,4 +5,5 @@ metadata:
   annotations:
     kustomize.toolkit.fluxcd.io/prune: disabled
   labels:
+    # privileged on purpose: coturn runs with hostNetwork (WebRTC media must not be NAT'd) and frigate needs /dev/dri plus a privileged helper; the per-user workspace pods the workplace API provisions also live here.
     pod-security.kubernetes.io/enforce: privileged
