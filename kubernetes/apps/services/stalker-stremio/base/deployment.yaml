@@ -23,7 +23,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: addon
-          image: docker.io/library/node:22-alpine
+          image: docker.io/library/node:24-alpine
           command: ["node", "/app/src/start.js"]
           ports:
             - name: http
