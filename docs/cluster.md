@@ -158,3 +158,111 @@ omnictl get clusterkubernetesmanifestsstatuses talos-default
 Velero was not available during the switch (backupstoragelocation
 `Unavailable`), so no extra snapshot was made. A reboot does not delete Longhorn
 volumes, but it is good to know that that safety net was not there.
+
+## Omni itself
+
+Omni is self-hosted: it runs on the Proxmox host `10.0.50.11`, inside LXC 108
+(`sidero-omni`), as a Docker container. There is no compose file - it is started by
+`/root/omni-deploy/run-omni.sh`, which was reconstructed from the running container
+(image, mounts, devices, capabilities and every flag) so that upgrades stop being
+guesswork:
+
+```bash
+cd /root/omni-deploy
+./run-omni.sh v1.12.1     # recreate the container on a given tag
+```
+
+Its state lives on the host and survives recreating the container:
+
+| Path | What |
+| --- | --- |
+| `/root/etcd` | embedded etcd - Omni's database, the thing that must not be lost |
+| `/root/sqlite` | `omni.db` (audit/backup state) |
+| `/root/backups` | etcd snapshots and the pre-upgrade container config dump |
+| `/root/bin/etcdctl` | version-matched CLI for taking those snapshots |
+
+### Two things the container cannot run without
+
+`siderolink` is WireGuard, so the container needs `/dev/net/tun` **and**
+`CAP_NET_ADMIN`, both passed explicitly by `run-omni.sh`:
+
+```
+--device /dev/net/tun:/dev/net/tun:rwm --cap-add=CAP_NET_ADMIN
+```
+
+Without them, Omni 1.11 and later exit at startup with
+
+```
+Error: failed to run server: error initializing wgDevice: error creating tun device:
+CreateTUN("siderolink") failed; /dev/net/tun does not exist
+```
+
+Older versions initialised the device lazily, which is why the missing device only
+surfaced on the first upgrade. The LXC config itself already passes the device
+(`lxc.cgroup2.devices.allow: c 10:200 rwm` plus a mount entry).
+
+### Upgrading
+
+Omni supports one minor version at a time, and database migrations are not
+reversible, so there is no way back except restoring a snapshot. A version that
+supports a newer Talos is worth the two hops:
+
+| Omni | Note |
+| --- | --- |
+| < 1.11 | does not support Talos 1.14 |
+| 1.11.0 | first release with Talos 1.14 support; backend API v3 |
+| 1.12.1 | current |
+
+```bash
+# 0. snapshot first - this is the only rollback that exists
+/root/bin/etcdctl --endpoints=http://localhost:2379 snapshot save /root/backups/omni-$(date +%F).db
+
+# 1. check the container does not keep etcd inside itself (it must not)
+docker inspect omni --format '{{range .Mounts}}{{println .Destination}}{{end}}' | grep -qEx '/_out(/etcd)?' \
+  && echo "etcd is on the host, safe to recreate the container" \
+  || echo "STOP: etcd lives in the container, follow the restore-omni-database guide first"
+
+# 2. one minor per hop, watching the migration logs
+docker pull ghcr.io/siderolabs/omni:v1.11.0 && ./run-omni.sh v1.11.0
+docker logs omni --tail 50
+docker pull ghcr.io/siderolabs/omni:v1.12.1 && ./run-omni.sh v1.12.1
+```
+
+`omnictl` must match the server: the backend API version changes between minors, and
+a mismatched client fails with `client API version mismatch`. The server serves a
+matching build itself, which is also how the CLI on the workstation is updated:
+
+```bash
+curl -sSfL -o /usr/local/bin/omnictl https://omni.tuntelder.com/api/omnictl/omnictl-linux-amd64
+chmod +x /usr/local/bin/omnictl && omnictl --version
+```
+
+### Verifying an upgrade
+
+```bash
+docker ps --filter name=omni                      # Up, not Restarting
+curl -sk -o /dev/null -w '%{http_code}\n' https://localhost/
+ip link show siderolink                           # the WireGuard interface
+ping6 -c1 fdae:41e4:649b:9303:<machine-address>   # machines over the tunnel
+docker logs omni --since 60s | grep -c "reconcile succeeded"
+```
+
+Expect the UI to answer, `siderolink` up, all machines answering, and a steady
+stream of successful reconciles. A handful of `i/o timeout` entries for machine
+addresses right after a restart is the tunnel re-establishing itself; they should
+stop within a minute or two.
+
+### The Proxmox infrastructure provider has a stale key
+
+`proxmox-provider-omni-infra-provider-proxmox-1` crash-loops (restart count in the
+tens of thousands) with:
+
+```
+Error: failed to get Omni system version: rpc error: code = Unauthenticated desc = invalid signature
+```
+
+Omni resolves the identity `proxmox`, so the provider is registered - it is the key
+that no longer matches. The provider authenticates with an *infrastructure provider
+key* (not a service account key), and it has to be registered again in Omni and
+pasted into `/root/proxmox-provider/docker-compose.yml`, which also still pins the
+provider image to `latest` (v0.3.0 is the current release).
