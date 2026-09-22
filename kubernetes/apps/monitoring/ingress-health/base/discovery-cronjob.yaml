@@ -16,7 +16,7 @@ data:
 
     PROBE_NAMESPACE="${PROBE_NAMESPACE:-monitoring}"
     PROBE_NAME="${PROBE_NAME:-ingress-health}"
-    PROBE_MODULE="${PROBE_MODULE:-https_2xx}"
+    PROBE_MODULE="${PROBE_MODULE:-https_reachable}"
     BLACKBOX_URL="${BLACKBOX_URL:-prometheus-blackbox-exporter.monitoring.svc.cluster.local:9115}"
     WORKDIR="${WORKDIR:-/work}"
 
@@ -56,6 +56,10 @@ data:
         for HOST in "${HOSTS[@]}"; do
           [[ -z "${HOST}" ]] && continue
           [[ "${HOST}" == *"*"* ]] && continue
+          # Workspace hosts are per-user: the mytops-workspace-owner middleware
+          # answers 404 to anyone who is not the owner, so an anonymous probe can
+          # only ever report them as broken. They are the application's business.
+          [[ "${HOST}" == ws-* ]] && continue
           if [[ "${HOST}" =~ ^[A-Za-z0-9.-]+$ ]] && [[ "${HOST}" == *.* ]]; then
             printf 'https://%s\n' "${HOST}" >> "${TARGETS_FILE}"
           fi
@@ -131,7 +135,7 @@ spec:
                 - name: PROBE_NAME
                   value: ingress-health
                 - name: PROBE_MODULE
-                  value: https_2xx
+                  value: https_reachable
                 - name: BLACKBOX_URL
                   value: prometheus-blackbox-exporter.monitoring.svc.cluster.local:9115
                 - name: WORKDIR
