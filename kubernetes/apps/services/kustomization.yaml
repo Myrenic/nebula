@@ -4,8 +4,9 @@ resources:
   - ./namespace.yaml
   - ./aiostreams
   - ./frigate
-  # These two deploy from their own repositories; only the GitRepository and the
-  # Flux Kustomization live here.
+  # These three deploy from their own repositories; only the GitRepository and
+  # the Flux Kustomization live here.
+  - ./lucian-cs
   - ./mushroom-finder
   - ./mytops
   - ./spottarr

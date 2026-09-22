@@ -17,6 +17,7 @@ resources:
   - ./homeassistant.yaml
   - ./keycloak.yaml
   - ./longhorn.yaml
+  - ./lucian.yaml
   - ./middlewares.yaml
   - ./mushroom-finder.yaml
   - ./mytops.yaml

@@ -1,0 +1,28 @@
+# The site (Vite/React source, the built bundle and the nginx config) lives in
+# https://github.com/Myrenic/lucian-cs. Everything platform-side stays here: this
+# Kustomization and the ingress route in network/exposure.
+#
+# No dependsOn: unlike mushroom-finder this app has no database and no volume,
+# so it needs nothing from longhorn. The cluster has no image registry either,
+# which is why the built site ships inside the repository as a ConfigMap.
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: lucian-cs
+  namespace: flux-system
+spec:
+  targetNamespace: services
+  interval: 1h
+  retryInterval: 1m
+  timeout: 5m
+  prune: true
+  path: ./base
+  sourceRef:
+    kind: GitRepository
+    name: lucian-cs
+    namespace: flux-system
+  postBuild:
+    substituteFrom:
+      - kind: Secret
+        name: cluster-secrets
+  wait: false

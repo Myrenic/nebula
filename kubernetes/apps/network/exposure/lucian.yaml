@@ -1,0 +1,25 @@
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: lucian-cs
+  namespace: network
+  annotations:
+    # Public by design, but unlisted: this is a preview of a site that will live
+    # on the client's own domain, so nginx sends X-Robots-Tag: noindex and a
+    # robots.txt that disallows everything (base/nginx.configmap.yaml), and
+    # nothing links here. It serves static pages and nothing user-specific, so
+    # there is no account to sign into. Move it behind oauth2-proxy-auth if it
+    # ever needs to be private rather than merely unlisted.
+    testlab.io/exposure: public
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    - match: Host(`lucian.${SECRET_DOMAIN_0}`)
+      kind: Rule
+      services:
+        - name: lucian-cs
+          namespace: services
+          port: 80
+  tls:
+    secretName: domain-0-prod-tls

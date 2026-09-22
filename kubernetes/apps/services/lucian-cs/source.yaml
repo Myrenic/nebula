@@ -1,0 +1,14 @@
+# App source lives in its own repository; this file is what makes Flux read it.
+#
+# Public on purpose: the GitRepository below has no secretRef, so anything
+# private would need credentials in the cluster that this repo does not have.
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: GitRepository
+metadata:
+  name: lucian-cs
+  namespace: flux-system
+spec:
+  interval: 1m
+  ref:
+    branch: main
+  url: https://github.com/Myrenic/lucian-cs
