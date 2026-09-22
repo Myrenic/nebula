@@ -266,3 +266,48 @@ that no longer matches. The provider authenticates with an *infrastructure provi
 key* (not a service account key), and it has to be registered again in Omni and
 pasted into `/root/proxmox-provider/docker-compose.yml`, which also still pins the
 provider image to `latest` (v0.3.0 is the current release).
+
+### Draining a node that runs Longhorn replicas
+
+Omni drains a node before it reboots it for a Talos upgrade, and Longhorn's default
+`node-drain-policy` (`block-if-contains-last-replica`) refuses to evict the
+instance-manager of a node holding the only replica of any volume. The drain then
+retries that eviction until its client-side rate limiter runs out of time, and the
+upgrade aborts with an error that names neither Longhorn nor the volume:
+
+```
+upgrade failed: cordon/drain before reboot failed: failed to drain node "talos-7uv-y3y":
+error when evicting pods/"instance-manager-…" -n "storage":
+client rate limiter Wait returned an error: rate: Wait(n=1) would exceed context deadline
+```
+
+Look at `kubectl -n storage get pdb`: instance-manager entries with
+`disruptionsAllowed: 0` are the blockers - that node holds a last replica. Two ways out:
+
+```bash
+# Option A - allow eviction for the duration of the maintenance, then restore:
+kubectl -n storage patch settings.longhorn.io node-drain-policy --type merge \
+  -p '{"value":"always-allow"}'
+#   ...upgrade the node...
+kubectl -n storage patch settings.longhorn.io node-drain-policy --type merge \
+  -p '{"value":"block-if-contains-last-replica"}'
+```
+
+Option B removes the cause: a second replica on the volumes that only have one. Today
+that is `frigate-media`, which the replica-adjuster deliberately skips, and it lives on
+the Intel-iGPU node - so it blocks every drain of that node on its own. A second
+replica costs disk and buys a drain that does not depend on the policy.
+
+Either way the volumes on the node being rebooted are unavailable while it is down.
+That is expected, and Longhorn recovers them: after the reboot `frigate-media` came
+back faulted, and `autoSalvage` rebuilt its engine from the on-disk replica on the next
+mount. The same reboot left 98 dead coturn pod objects behind (its pods are pinned to
+one node for its public IP); those clean up with
+
+```bash
+kubectl -n services delete pod --field-selector=status.phase=Failed
+```
+
+Omni upgrades one machine at a time (it serialises them with an upgrade lock) and
+uncordons the node itself once the machine is back, so a half-finished cluster upgrade
+just needs to be retried - there is no state to clean up by hand.
