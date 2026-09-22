@@ -73,7 +73,7 @@ spec:
               # Was bitnami/kubectl:latest, which is unpinned and no longer
               # published in Bitnami's free catalog. Same image as the other
               # in-cluster kubectl jobs.
-              image: alpine/k8s:1.36.0
+              image: alpine/k8s:1.37.0
               command:
                 - /bin/sh
                 - -c

@@ -125,7 +125,7 @@ spec:
               # present (the script uses bashisms on purpose).
               # Was bitnami/kubectl:latest: unpinned, and no longer published in
               # Bitnami's free catalog.
-              image: alpine/k8s:1.36.0
+              image: alpine/k8s:1.37.0
               command:
                 - /bin/bash
                 - /scripts/discover.sh
