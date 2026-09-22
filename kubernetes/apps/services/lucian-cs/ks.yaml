@@ -5,6 +5,11 @@
 # No dependsOn: unlike mushroom-finder this app has no database and no volume,
 # so it needs nothing from longhorn. The cluster has no image registry either,
 # which is why the built site ships inside the repository as a ConfigMap.
+#
+# No postBuild.substituteFrom either, and that is not an oversight: Flux runs
+# envsubst over every resource, the bundle is JavaScript full of `${...}`
+# template literals, and envsubst fails the whole Kustomization on them (seen
+# as "missing closing brace"). Nothing in ./base needs a cluster secret.
 apiVersion: kustomize.toolkit.fluxcd.io/v1
 kind: Kustomization
 metadata:
@@ -21,8 +26,4 @@ spec:
     kind: GitRepository
     name: lucian-cs
     namespace: flux-system
-  postBuild:
-    substituteFrom:
-      - kind: Secret
-        name: cluster-secrets
   wait: false
