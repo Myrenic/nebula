@@ -92,6 +92,14 @@ spec:
               # follow-up it just thought of, and the pages it finds are read into
               # context - one search is a lookup, several in a row is research.
               ENABLE_WEB_SEARCH: "true"
+              # Provider models arrive with no capabilities and no default
+              # features, and the chat UI applies a model's default feature only
+              # when its meta says the model supports it - so leaving these unset
+              # keeps web search a toggle nobody remembers to flip. This is what
+              # makes the model search on its own and cite what it read.
+              # capability merges with per-model values winning; defaultFeatureIds
+              # only fills in where the model sets none.
+              DEFAULT_MODEL_METADATA: '{"capabilities": {"web_search": true}, "defaultFeatureIds": ["web_search"]}'
               # Keyless: the image ships ddgs, so there is nothing to run and
               # nothing to sign up for. Every other engine here (Brave, Tavily,
               # Serper, Google PSE, Kagi...) needs an account, or a self-hosted
