@@ -109,8 +109,14 @@ spec:
               # picked for a conversation is only paid for the answers.
               TASK_MODEL_EXTERNAL: "gpt-5.6-luna"
               # Model pre-selected in a new chat, so the phone opens ready to
-              # type instead of asking which model to use.
-              DEFAULT_MODELS: "gpt-5.6-terra"
+              # type instead of asking which model to use. Not the workstation's
+              # main model (gpt-5.6-terra): that one is excluded by the provider
+              # plan and answers MODEL_NOT_IN_PLAN, and a plan limit surfaces as a
+              # chat error rather than as a missing model. Of the 80 models the
+              # provider lists, 58 answer on /chat/completions - the rest are
+              # plan-excluded or Claude models, which this endpoint does not
+              # speak. The workspace's model list keeps only the 58.
+              DEFAULT_MODELS: "gpt-5.6-luna"
               # Dictation works offline: faster-whisper "base" is baked into the
               # image and copied into the volume, so the microphone button on the
               # phone ships audio nowhere.
