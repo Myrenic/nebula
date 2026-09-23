@@ -60,10 +60,7 @@ spec:
               ENABLE_OLLAMA_API: "false"
               # commandcode.ai's OpenAI-compatible endpoint - the same provider
               # the opencode/Oh My Pi tooling on the workstation uses. The key
-              # is in open-webui-secret; Open WebUI copies connection settings
-              # into its database on first start (persistent config), so
-              # rotating that Secret later also means editing Admin settings ->
-              # Connections, or deleting the stored openai.* config rows.
+              # is in open-webui-secret.
               OPENAI_API_BASE_URLS: "https://api.commandcode.ai/provider/v1"
               # Public host, so registration stays shut: auths.signup only
               # checks ENABLE_SIGNUP once a user exists, and the first account is
@@ -75,6 +72,51 @@ spec:
               # startup. The web client and the phone PWA are same-origin, so
               # only the host that serves them needs to be allowed.
               CORS_ALLOW_ORIGIN: "https://chat.${SECRET_DOMAIN_0}"
+              # Answers come from the web, not only from training data. With the
+              # default function_calling=native the model decides when to search:
+              # it calls the built-in web_search tool, can call it again for a
+              # follow-up it just thought of, and the pages it finds are read into
+              # context - one search is a lookup, several in a row is research.
+              ENABLE_WEB_SEARCH: "true"
+              # Keyless: the image ships ddgs, so there is nothing to run and
+              # nothing to sign up for. Every other engine here (Brave, Tavily,
+              # Serper, Google PSE, Kagi...) needs an account, or a self-hosted
+              # SearXNG, which would be the upgrade if DuckDuckGo starts
+              # rate-limiting this address.
+              WEB_SEARCH_ENGINE: "duckduckgo"
+              WEB_SEARCH_RESULT_COUNT: "5"
+              # By default the fetched pages are chunked, embedded and top-k
+              # retrieved locally first. Skipping that puts them in the context
+              # window instead: better answers, and one less CPU-bound step per
+              # search - the models in use have the room for it.
+              BYPASS_WEB_SEARCH_EMBEDDING_AND_RETRIEVAL: "true"
+              # Titles, tags, follow-up questions and search queries are model
+              # calls of their own. Keep them on the fast model so the chat model
+              # picked for a conversation is only paid for the answers.
+              TASK_MODEL_EXTERNAL: "gpt-5.6-luna"
+              # Model pre-selected in a new chat, so the phone opens ready to
+              # type instead of asking which model to use.
+              DEFAULT_MODELS: "gpt-5.6-terra"
+              # Dictation works offline: faster-whisper "base" is baked into the
+              # image and copied into the volume, so the microphone button on the
+              # phone ships audio nowhere.
+              AUDIO_STT_ENGINE: "local"
+              # Nothing here belongs in a public prompt gallery, and the button
+              # phones home.
+              ENABLE_COMMUNITY_SHARING: "false"
+              # The embedding model is already in the image: the boot-time update
+              # check is a Hugging Face round trip for something nothing needs.
+              RAG_EMBEDDING_MODEL_AUTO_UPDATE: "false"
+              # Server settings live in this file, not in webui.db. Open WebUI's
+              # default is the opposite: the first start seeds every env default
+              # into a config table and every later env change is ignored, which
+              # is how "I edited the manifest and nothing happened" happens (it
+              # happened here - the web search defaults were already frozen before
+              # this block existed). Only server-side settings are affected; chats,
+              # users, models, prompts, knowledge, memories and files are separate
+              # tables, and Admin settings still apply for the session, they just
+              # do not outlive a restart.
+              ENABLE_PERSISTENT_CONFIG: "false"
             probes:
               liveness:
                 enabled: true
