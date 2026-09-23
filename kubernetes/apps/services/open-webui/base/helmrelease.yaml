@@ -125,6 +125,23 @@ spec:
               # plan-excluded or Claude models, which this endpoint does not
               # speak. The workspace's model list keeps only the 58.
               DEFAULT_MODELS: "gpt-5.6-luna"
+              # Long-term memory: the model can save enduring facts (a tool, when
+              # the chat's memory feature is on, which the global default switches
+              # on for every chat), and saved memories are injected into the system
+              # prompt of later chats. The first two lines are upstream defaults
+              # pinned here because they are the two that make "remembered across
+              # chats" true, and this file should say so without a reader having to
+              # check upstream.
+              ENABLE_MEMORIES: "true"
+              ENABLE_MEMORY_SYSTEM_CONTEXT: "true"
+              # Off upstream. With it off, a memory exists only if you or the
+              # model explicitly saved one; this is what makes memories form on
+              # their own from ordinary conversation.
+              ENABLE_MEMORY_BACKGROUND_REVIEW: "true"
+              # Upstream reviews every 10th user turn. Three keeps memory current
+              # in normal use; the review is one extra call to the chat's model
+              # and it runs in the background, so it costs latency nowhere.
+              MEMORIES_REVIEW_INTERVAL_TURNS: "3"
               # Dictation works offline: faster-whisper "base" is baked into the
               # image and copied into the volume, so the microphone button on the
               # phone ships audio nowhere.
