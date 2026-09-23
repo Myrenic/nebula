@@ -1,0 +1,92 @@
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: searxng
+spec:
+  interval: 1h
+  chartRef:
+    kind: OCIRepository
+    name: searxng
+  values:
+    controllers:
+      searxng:
+        containers:
+          app:
+            image:
+              repository: docker.io/searxng/searxng
+              tag: 2026.9.23-3cd69d30e
+            env:
+              TZ: "${TZ}"
+            probes:
+              liveness:
+                enabled: true
+                custom: true
+                spec:
+                  httpGet:
+                    path: /healthz
+                    port: 8080
+                  initialDelaySeconds: 20
+                  periodSeconds: 30
+                  timeoutSeconds: 5
+                  failureThreshold: 5
+              readiness:
+                enabled: true
+                custom: true
+                spec:
+                  httpGet:
+                    path: /healthz
+                    port: 8080
+                  initialDelaySeconds: 10
+                  periodSeconds: 10
+                  timeoutSeconds: 5
+                  failureThreshold: 6
+              startup:
+                enabled: true
+                custom: true
+                spec:
+                  httpGet:
+                    path: /healthz
+                    port: 8080
+                  periodSeconds: 10
+                  timeoutSeconds: 5
+                  failureThreshold: 30
+            resources:
+              requests:
+                cpu: 100m
+                memory: 256Mi
+              limits:
+                memory: 1Gi
+            securityContext:
+              runAsNonRoot: true
+              allowPrivilegeEscalation: false
+              capabilities:
+                drop: ["ALL"]
+    defaultPodOptions:
+      securityContext:
+        # 977 is the uid/gid the image ships its files with, which is the one the
+        # entry point checks for (it chowns only when it runs as root, and warns
+        # otherwise).
+        runAsUser: 977
+        runAsGroup: 977
+        fsGroup: 977
+        fsGroupChangePolicy: OnRootMismatch
+        seccompProfile:
+          type: RuntimeDefault
+    service:
+      app:
+        ports:
+          http:
+            port: 8080
+    persistence:
+      config:
+        type: configMap
+        name: searxng-config
+        globalMounts:
+          - path: /etc/searxng
+            readOnly: true
+      # SearXNG keeps a small cache of engine state; emptyDir is enough and it
+      # is the only path the process writes to.
+      cache:
+        type: emptyDir
+        globalMounts:
+          - path: /var/cache/searxng

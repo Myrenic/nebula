@@ -100,12 +100,12 @@ spec:
               # capability merges with per-model values winning; defaultFeatureIds
               # only fills in where the model sets none.
               DEFAULT_MODEL_METADATA: '{"capabilities": {"web_search": true}, "defaultFeatureIds": ["web_search"]}'
-              # Keyless: the image ships ddgs, so there is nothing to run and
-              # nothing to sign up for. Every other engine here (Brave, Tavily,
-              # Serper, Google PSE, Kagi...) needs an account, or a self-hosted
-              # SearXNG, which would be the upgrade if DuckDuckGo starts
-              # rate-limiting this address.
-              WEB_SEARCH_ENGINE: "duckduckgo"
+              # In-cluster SearXNG (kubernetes/apps/services/searxng), not
+              # DuckDuckGo: no per-query rate limit, no third party in the path,
+              # and one place to see what actually gets searched. The URL is the
+              # service, not the LAN host - the query never leaves the cluster.
+              WEB_SEARCH_ENGINE: "searxng"
+              SEARXNG_QUERY_URL: "http://searxng.services.svc.cluster.local:8080/search"
               WEB_SEARCH_RESULT_COUNT: "5"
               # By default the fetched pages are chunked, embedded and top-k
               # retrieved locally first. Skipping that puts them in the context

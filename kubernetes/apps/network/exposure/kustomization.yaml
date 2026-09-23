@@ -24,6 +24,7 @@ resources:
   - ./oauth2-proxy.yaml
   - ./obsidiansync.yaml
   - ./open-webui.yaml
+  - ./searxng.yaml
   - ./spottarr.yaml
   - ./stalker-stremio.yaml
   - ./traefik.yaml

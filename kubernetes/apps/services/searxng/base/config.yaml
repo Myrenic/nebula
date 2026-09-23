@@ -1,0 +1,36 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: searxng-config
+data:
+  # Upstream defaults stay in place (`use_default_settings`), so the engine list
+  # and the rest of the configuration come from the image; only what is written
+  # here is overridden.
+  settings.yml: |
+    use_default_settings: true
+
+    general:
+      instance_name: "SearXNG"
+
+    server:
+      # Substituted from cluster-secrets by Flux's postBuild. Not in git.
+      secret_key: "${SEARXNG_SECRET}"
+      base_url: "https://searxng.${SECRET_DOMAIN_0}"
+      # The limiter is SearXNG's bot protection, and it would throttle the only
+      # two clients this instance has - Open WebUI in the same cluster asking for
+      # JSON, and a browser on the LAN. It is off on purpose, and what keeps the
+      # instance from being abused is that it answers RFC1918 sources only
+      # (kubernetes/apps/network/exposure/searxng.yaml), not a rate limiter.
+      limiter: false
+      public_instance: false
+      image_proxy: false
+
+    search:
+      safe_search: 0
+      autocomplete: ""
+      # SearXNG serves HTML only unless json is listed. Open WebUI asks for
+      # ?format=json; without this entry every search comes back as a parse
+      # error, which is the classic way this integration fails.
+      formats:
+        - html
+        - json

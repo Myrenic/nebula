@@ -10,6 +10,7 @@ resources:
   - ./mushroom-finder
   - ./mytops
   - ./open-webui
+  - ./searxng
   - ./spottarr
   - ./stalker-stremio
   - ./uptime-kuma

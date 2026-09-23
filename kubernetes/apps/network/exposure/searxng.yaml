@@ -1,0 +1,26 @@
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: searxng
+  namespace: network
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    # LAN only, and because of what this instance is rather than what it
+    # authenticates: the limiter is off (see the ConfigMap in
+    # kubernetes/apps/services/searxng), so a public route would turn it into an
+    # open relay that scrapes Google and Bing for whoever finds the hostname.
+    # Traefik refuses non-RFC1918 source addresses before SearXNG sees them.
+    # Open WebUI reaches the same instance over cluster DNS and never through
+    # here, so the phone-side chat keeps working with this route removed.
+    - match: Host(`search.${SECRET_DOMAIN_0}`)
+      kind: Rule
+      middlewares:
+        - name: lan-only
+      services:
+        - name: searxng
+          namespace: services
+          port: 8080
+  tls:
+    secretName: domain-0-prod-tls
