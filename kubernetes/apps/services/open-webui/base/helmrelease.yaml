@@ -40,15 +40,23 @@ spec:
               TZ: "${TZ}"
               WEBUI_URL: "https://chat.${SECRET_DOMAIN_0}"
               # Session signing key and the model provider's API key, substituted
-              # from cluster-secrets by Flux's postBuild. They are deliberately NOT
-              # in a *.sops.yaml file next to this manifest: app-level SOPS files
-              # are applied as ciphertext in this cluster (only the root
-              # Kustomization carries spec.decryption), which is easy to miss
-              # because it looks like an opaque token - aiostreams' own secret
-              # lands that way and is only harmless because its `env:` overrides
-              # its `envFrom:`).
+              # from cluster-secrets by Flux's postBuild. They are deliberately not
+              # in a *.sops.yaml file next to this manifest: SOPS decryption is
+              # per-Kustomization (spec.decryption, which only the root,
+              # monitoring-kube-prometheus-stack and mytops set), so a secret file
+              # under an app that forgets it is applied as ciphertext. aiostreams
+              # is in exactly that state - its aiostreams-secret carries
+              # ENC[AES256_GCM,...] in the cluster right now, masked only because
+              # its `env:` overrides its `envFrom:`.
               WEBUI_SECRET_KEY: "${OPENWEBUI_SECRET_KEY}"
               OPENAI_API_KEYS: "${COMMANDCODE_API_KEY}"
+              # Belt and braces for the same reason: the entry point writes
+              # .webui_secret_key next to the code when the environment variable is
+              # empty, and that directory belongs to root - so a missing
+              # substitution does not degrade, it crash-loops the pod. Pointing the
+              # file into the volume turns that into a generated key that survives
+              # restarts instead.
+              WEBUI_SECRET_KEY_FILE: "/app/backend/data/.webui_secret_key"
               # The image sets HOME=/root, which only root owns; the app writes
               # its cache and telemetry marker under $HOME, so as uid 1000 it has
               # to point into the volume.
