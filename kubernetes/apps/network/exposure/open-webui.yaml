@@ -3,21 +3,24 @@ kind: IngressRoute
 metadata:
   name: open-webui
   namespace: network
-  annotations:
-    # Public by design, and the same call as homeassistant.yaml: this is the host
-    # the phone installs as a PWA, and Open WebUI authenticates with its own
-    # login. A forwardAuth 401 mid-run would be answered with a sign-in HTML page
-    # instead of JSON/SSE, and oauth2-proxy has no way to call the stopped
-    # session's streaming endpoints. Registration is closed
-    # (ENABLE_SIGNUP=false), so the only account that can exist is the one
-    # created on first visit.
-    testlab.io/exposure: public
 spec:
   entryPoints:
     - websecure
   routes:
+    # LAN only, like spottarr and frigate: what sits behind this host is the
+    # household's commandcode key, and the phone that uses it is on the same
+    # WiFi. The wildcard DNS record still answers from outside, but Traefik
+    # refuses non-RFC1918 source addresses before Open WebUI sees them, so
+    # reaching it from anywhere else means a VPN into the LAN.
+    #
+    # No forwardAuth on top: Open WebUI authenticates with its own login
+    # (ENABLE_SIGNUP=false, so the only account that can exist is the one created
+    # on first visit), and a 401 halfway through a response would answer a
+    # streaming request with a sign-in page.
     - match: Host(`chat.${SECRET_DOMAIN_0}`)
       kind: Rule
+      middlewares:
+        - name: lan-only
       services:
         - name: open-webui
           namespace: services
