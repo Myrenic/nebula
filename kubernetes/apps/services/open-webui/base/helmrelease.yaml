@@ -1,0 +1,148 @@
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: open-webui
+spec:
+  interval: 1h
+  chartRef:
+    kind: OCIRepository
+    name: open-webui
+  values:
+    controllers:
+      open-webui:
+        initContainers:
+          # The image bakes the RAG embedding, whisper and tiktoken caches into
+          # /app/backend/data (see its Dockerfile), and the volume mount below
+          # would hide them. Upstream's chart copies them into the volume for the
+          # same reason: without this the first embedding call downloads ~90 MB
+          # from Hugging Face into the volume, and speech-to-text ~150 MB more.
+          copy-app-data:
+            image:
+              repository: ghcr.io/open-webui/open-webui
+              tag: v0.11.4
+            # `/.` rather than `/*`: an empty source directory copies fine
+            # instead of failing the glob.
+            command:
+              - sh
+              - -c
+              - cp -R -n /app/backend/data/. /tmp/app-data/
+            securityContext:
+              runAsNonRoot: true
+              allowPrivilegeEscalation: false
+              capabilities:
+                drop: ["ALL"]
+        containers:
+          app:
+            image:
+              repository: ghcr.io/open-webui/open-webui
+              tag: v0.11.4
+            envFrom:
+              # WEBUI_SECRET_KEY (session signing) and OPENAI_API_KEYS.
+              - secretRef:
+                  name: open-webui-secret
+            env:
+              TZ: "${TZ}"
+              WEBUI_URL: "https://chat.${SECRET_DOMAIN_0}"
+              # The image sets HOME=/root, which only root owns; the app writes
+              # its cache and telemetry marker under $HOME, so as uid 1000 it has
+              # to point into the volume.
+              HOME: "/app/backend/data"
+              # Same reason: at import Open WebUI empties its static directory and
+              # re-copies the frontend bundle into it, and admin branding
+              # (custom.css, logo) is written there too. In the image that
+              # directory belongs to root, so as uid 1000 every one of those
+              # copies logs a permission error. Pointing it into the volume gives
+              # the app the writable directory it expects.
+              STATIC_DIR: "/app/backend/data/static"
+              ENABLE_OPENAI_API: "true"
+              # There is no Ollama anywhere in this cluster. Left at its default
+              # the UI would list a connection that always answers with an error.
+              ENABLE_OLLAMA_API: "false"
+              # commandcode.ai's OpenAI-compatible endpoint - the same provider
+              # the opencode/Oh My Pi tooling on the workstation uses. The key
+              # is in open-webui-secret; Open WebUI copies connection settings
+              # into its database on first start (persistent config), so
+              # rotating that Secret later also means editing Admin settings ->
+              # Connections, or deleting the stored openai.* config rows.
+              OPENAI_API_BASE_URLS: "https://api.commandcode.ai/provider/v1"
+              # Public host, so registration stays shut: auths.signup only
+              # checks ENABLE_SIGNUP once a user exists, and the first account is
+              # the admin that gets created on the first visit.
+              ENABLE_SIGNUP: "false"
+              ENABLE_INITIAL_ADMIN_SIGNUP: "true"
+              WEBUI_SESSION_COOKIE_SECURE: "true"
+              # The default is '*', which Open WebUI itself warns about at
+              # startup. The web client and the phone PWA are same-origin, so
+              # only the host that serves them needs to be allowed.
+              CORS_ALLOW_ORIGIN: "https://chat.${SECRET_DOMAIN_0}"
+            probes:
+              liveness:
+                enabled: true
+                custom: true
+                spec:
+                  httpGet:
+                    path: /health
+                    port: 8080
+                  initialDelaySeconds: 30
+                  periodSeconds: 30
+                  timeoutSeconds: 5
+                  failureThreshold: 5
+              readiness:
+                enabled: true
+                custom: true
+                spec:
+                  httpGet:
+                    path: /health
+                    port: 8080
+                  initialDelaySeconds: 10
+                  periodSeconds: 10
+                  timeoutSeconds: 5
+                  failureThreshold: 6
+              startup:
+                enabled: true
+                custom: true
+                spec:
+                  # The first start runs the DB migrations; 30 x 10s is the
+                  # budget for that, after which liveness takes over.
+                  httpGet:
+                    path: /health
+                    port: 8080
+                  periodSeconds: 10
+                  timeoutSeconds: 5
+                  failureThreshold: 30
+            resources:
+              requests:
+                cpu: 100m
+                memory: 512Mi
+              limits:
+                memory: 2Gi
+            securityContext:
+              runAsNonRoot: true
+              allowPrivilegeEscalation: false
+              capabilities:
+                drop: ["ALL"]
+    defaultPodOptions:
+      securityContext:
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        fsGroupChangePolicy: OnRootMismatch
+        seccompProfile:
+          type: RuntimeDefault
+    service:
+      app:
+        ports:
+          http:
+            port: 8080
+    persistence:
+      data:
+        type: persistentVolumeClaim
+        storageClass: longhorn
+        accessMode: ReadWriteOnce
+        size: 10Gi
+        advancedMounts:
+          open-webui:
+            copy-app-data:
+              - path: /tmp/app-data
+            app:
+              - path: /app/backend/data

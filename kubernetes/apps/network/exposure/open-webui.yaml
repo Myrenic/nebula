@@ -1,0 +1,26 @@
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: open-webui
+  namespace: network
+  annotations:
+    # Public by design, and the same call as homeassistant.yaml: this is the host
+    # the phone installs as a PWA, and Open WebUI authenticates with its own
+    # login. A forwardAuth 401 mid-run would be answered with a sign-in HTML page
+    # instead of JSON/SSE, and oauth2-proxy has no way to call the stopped
+    # session's streaming endpoints. Registration is closed
+    # (ENABLE_SIGNUP=false), so the only account that can exist is the one
+    # created on first visit.
+    testlab.io/exposure: public
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    - match: Host(`chat.${SECRET_DOMAIN_0}`)
+      kind: Rule
+      services:
+        - name: open-webui
+          namespace: services
+          port: 8080
+  tls:
+    secretName: domain-0-prod-tls

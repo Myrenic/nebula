@@ -9,6 +9,7 @@ resources:
   - ./lucian-cs
   - ./mushroom-finder
   - ./mytops
+  - ./open-webui
   - ./spottarr
   - ./stalker-stremio
   - ./uptime-kuma

@@ -23,6 +23,7 @@ resources:
   - ./mytops.yaml
   - ./oauth2-proxy.yaml
   - ./obsidiansync.yaml
+  - ./open-webui.yaml
   - ./spottarr.yaml
   - ./stalker-stremio.yaml
   - ./traefik.yaml
