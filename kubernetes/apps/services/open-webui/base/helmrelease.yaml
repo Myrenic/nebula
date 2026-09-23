@@ -36,13 +36,19 @@ spec:
             image:
               repository: ghcr.io/open-webui/open-webui
               tag: v0.11.4
-            envFrom:
-              # WEBUI_SECRET_KEY (session signing) and OPENAI_API_KEYS.
-              - secretRef:
-                  name: open-webui-secret
             env:
               TZ: "${TZ}"
               WEBUI_URL: "https://chat.${SECRET_DOMAIN_0}"
+              # Session signing key and the model provider's API key, substituted
+              # from cluster-secrets by Flux's postBuild. They are deliberately NOT
+              # in a *.sops.yaml file next to this manifest: app-level SOPS files
+              # are applied as ciphertext in this cluster (only the root
+              # Kustomization carries spec.decryption), which is easy to miss
+              # because it looks like an opaque token - aiostreams' own secret
+              # lands that way and is only harmless because its `env:` overrides
+              # its `envFrom:`).
+              WEBUI_SECRET_KEY: "${OPENWEBUI_SECRET_KEY}"
+              OPENAI_API_KEYS: "${COMMANDCODE_API_KEY}"
               # The image sets HOME=/root, which only root owns; the app writes
               # its cache and telemetry marker under $HOME, so as uid 1000 it has
               # to point into the volume.
