@@ -108,3 +108,29 @@ spec:
     customResponseHeaders:
       X-Robots-Tag: "noindex, nofollow"
 
+
+---
+# The response headers Lighthouse asks every site for. HSTS deliberately omits
+# includeSubDomains: this is one host among several on the same domain, and
+# pinning the parent is a decision nobody has made. There is no CSP on purpose -
+# Ghost's admin is inline-script heavy and a policy strict enough to be worth
+# having would break the editor, so it is a project of its own.
+#
+# X-Frame-Options is SAMEORIGIN rather than frameDeny: Ghost's editor previews a
+# post in an iframe of the same origin, and DENY would break its own preview.
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: security-headers
+  namespace: network
+spec:
+  headers:
+    stsSeconds: 31536000
+    stsIncludeSubdomains: false
+    stsPreload: false
+    forceSTSHeader: true
+    contentTypeNosniff: true
+    referrerPolicy: strict-origin-when-cross-origin
+    customResponseHeaders:
+      X-Frame-Options: SAMEORIGIN
+      Cross-Origin-Opener-Policy: same-origin

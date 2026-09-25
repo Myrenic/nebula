@@ -26,6 +26,7 @@ spec:
     - match: Host(`lucian.${SECRET_DOMAIN_0}`) && PathPrefix(`/ghost`)
       kind: Rule
       middlewares:
+        - name: security-headers
         - name: noindex
         - name: lan-only
       services:
@@ -35,6 +36,7 @@ spec:
     - match: Host(`lucian.${SECRET_DOMAIN_0}`)
       kind: Rule
       middlewares:
+        - name: security-headers
         - name: noindex
       services:
         - name: lucian-ghost
