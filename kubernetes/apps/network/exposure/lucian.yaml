@@ -1,25 +1,44 @@
 apiVersion: traefik.io/v1alpha1
 kind: IngressRoute
 metadata:
-  name: lucian-cs
+  name: lucian-ghost
   namespace: network
   annotations:
     # Public by design, but unlisted: this is a preview of a site that will live
-    # on the client's own domain, so nginx sends X-Robots-Tag: noindex and a
-    # robots.txt that disallows everything (base/nginx.configmap.yaml), and
-    # nothing links here. It serves static pages and nothing user-specific, so
-    # there is no account to sign into. Move it behind oauth2-proxy-auth if it
-    # ever needs to be private rather than merely unlisted.
+    # on the client's own domain, so Traefik stamps X-Robots-Tag: noindex on
+    # every response (middleware below). Ghost serves its own robots.txt, which
+    # allows crawling - that is correct once the site is on the client's domain,
+    # and the header is what keeps this host out of search results either way.
     testlab.io/exposure: public
 spec:
   entryPoints:
     - websecure
   routes:
+    # The admin and its API are not part of the public site. Ghost has its own
+    # login (password plus an emailed code from a new device), but a CMS admin
+    # reachable from the internet is a liability nobody asked for, so /ghost
+    # stays on the LAN. Traefik matches the longer rule first, so this wins for
+    # every /ghost path.
+    #
+    # At go-live, decide deliberately: either leave it LAN-only (the client's
+    # office is on this network), or swap lan-only for oauth2-proxy-auth, or
+    # accept Ghost's own 2FA and make it public.
+    - match: Host(`lucian.${SECRET_DOMAIN_0}`) && PathPrefix(`/ghost`)
+      kind: Rule
+      middlewares:
+        - name: noindex
+        - name: lan-only
+      services:
+        - name: lucian-ghost
+          namespace: services
+          port: 2368
     - match: Host(`lucian.${SECRET_DOMAIN_0}`)
       kind: Rule
+      middlewares:
+        - name: noindex
       services:
-        - name: lucian-cs
+        - name: lucian-ghost
           namespace: services
-          port: 80
+          port: 2368
   tls:
     secretName: domain-0-prod-tls

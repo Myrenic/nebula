@@ -92,3 +92,19 @@ spec:
       - 172.16.0.0/12
       - 192.168.0.0/16
 
+---
+# Keeps preview hosts out of search results. The static build did this in nginx,
+# with both this header and a disallowing robots.txt; for Ghost the header is the
+# mechanism that matters, because it is what a crawler honours once the page has
+# been fetched at all. Ghost's own robots.txt stays as it ships, so nothing has
+# to be undone when the site moves to the client's own domain.
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: noindex
+  namespace: network
+spec:
+  headers:
+    customResponseHeaders:
+      X-Robots-Tag: "noindex, nofollow"
+
