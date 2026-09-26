@@ -1,0 +1,23 @@
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: forgejo
+  namespace: network
+  annotations:
+    # Public by design, like the status page: a forge has to answer a git client
+    # that has no session, so oauth2-proxy cannot sit in front of it - a 401
+    # would be answered with a redirect to Keycloak that `git fetch` cannot
+    # follow. Forgejo has its own accounts, and registration is closed.
+    testlab.io/exposure: public
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    - match: Host(`code.${SECRET_DOMAIN_0}`)
+      kind: Rule
+      services:
+        - name: forgejo-http
+          namespace: services
+          port: 3000
+  tls:
+    secretName: domain-0-prod-tls

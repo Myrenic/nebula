@@ -20,7 +20,7 @@ storage. Those limits are written down here instead of being discovered later.
 | Virtualization | KubeVirt + CDI, one VM workspace today | `kubernetes/apps/kubevirt/` |
 | Observability | kube-prometheus-stack, Loki, Promtail, blackbox probes per discovered host, Telegram alerts | `kubernetes/apps/monitoring/` |
 | Workspaces | `mytops`: browser desktops and VMs, its own repository | `kubernetes/apps/services/mytops/` |
-| Other apps | aiostreams, frigate (+ reolinkproxy), open-webui, searxng, spottarr, stalker-stremio, uptime-kuma | `kubernetes/apps/services/` |
+| Other apps | aiostreams, forgejo, frigate (+ reolinkproxy), open-webui, searxng, spottarr, stalker-stremio, uptime-kuma | `kubernetes/apps/services/` |
 | Outside the cluster | homeassistant, obsidiansync - reachable through a Service + Endpoints pair that points at another machine | `kubernetes/apps/network/exposure/` |
 
 Two applications keep their code and manifests in their own repositories, because
@@ -300,8 +300,19 @@ kubectl -n services rollout status deploy/mytops-webui --timeout=180s
 - **Access model.** Traefik terminates TLS with the cert-manager certificate
   `domain-0-prod` (Cloudflare DNS-01) and is the only LoadBalancer service
   (`10.0.50.4`, MetalLB L2 pool `10.0.50.4-10.0.50.6`). oauth2-proxy in front of
-  Keycloak is the only authentication path; identity arrives as oauth2-proxy's
-  headers, never from the client.
+  Keycloak is the authentication path for everything behind `oauth2-proxy-auth`;
+  the routes marked public (status page, the forge) answer with their own
+  accounts. Identity arrives as oauth2-proxy's headers, never from the client.
+- **The forge is themed from git.** `kubernetes/apps/services/forgejo/base/theme/`
+  holds a stylesheet, Forgejo's `templates/custom/header.tmpl` hook, a replacement
+  `templates/home.tmpl` and three icons. The ConfigMap is mounted over the matching
+  paths under `custom/` in the `/data` volume - `custom/public/assets` for what a
+  browser fetches, `custom/templates` for what Forgejo renders. The colours are
+  Forgejo's own variables (`--color-primary*`, `--color-nav-bg`) redefined for both
+  halves of `forgejo-auto`, so no page markup had to be copied to recolour the
+  application. Those mounts are `subPath`, which the kubelet does not refresh under
+  a running pod: after a theme change,
+  `kubectl -n services rollout restart deploy/forgejo`.
 - **Workspace streams are owner-scoped.** Workspace IngressRoutes carry the
   `oauth2-proxy-auth` and `mytops-workspace-owner` middlewares; the second one asks
   the workplace API whether the signed-in user owns the host in the request, because

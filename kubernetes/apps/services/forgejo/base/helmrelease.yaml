@@ -1,0 +1,111 @@
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: forgejo
+spec:
+  interval: 1h
+  dependsOn:
+    - name: forgejo-postgres
+  chartRef:
+    kind: OCIRepository
+    name: forgejo
+  install:
+    remediation:
+      retries: 3
+  upgrade:
+    remediation:
+      retries: 3
+  values:
+    # image.tag is deliberately not set: the chart's appVersion is the Forgejo
+    # version, so bumping the chart (Renovate, on the OCIRepository tag) is the
+    # one move that upgrades the application, and a pinned tag here would fight
+    # it.
+    gitea:
+      admin:
+        username: "${FORGEJO_ADMIN_USERNAME}"
+        password: "${FORGEJO_ADMIN_PASSWORD}"
+        # No mailer is configured, so this is an account identifier rather than
+        # somewhere Forgejo writes to; it is the owner's address so that adding a
+        # mailer later does not start bouncing password resets into the void.
+        email: "${SECRET_ACME_EMAIL}"
+        # The declared password wins: every pod start re-applies it, so changing
+        # it in the web UI is undone at the next restart. Change it here instead.
+        passwordMode: keepUpdated
+      config:
+        APP_NAME: "code.${SECRET_DOMAIN_0}"
+        RUN_MODE: prod
+        server:
+          DOMAIN: "code.${SECRET_DOMAIN_0}"
+          ROOT_URL: "https://code.${SECRET_DOMAIN_0}/"
+        database:
+          DB_TYPE: postgres
+          HOST: forgejo-postgres:5432
+          NAME: forgejo
+          USER: forgejo
+          PASSWD: "${FORGEJO_DB_PASSWORD}"
+          SSL_MODE: disable
+        service:
+          # The host is on the public DNS like every other one here, and a forge
+          # with open registration is a spam target. Accounts come from the admin
+          # user above or from Site administration.
+          DISABLE_REGISTRATION: true
+        session:
+          # Default is memory, which would sign everyone out on every restart -
+          # and this pod restarts whenever the chart or the theme changes.
+          PROVIDER: db
+    persistence:
+      enabled: true
+      size: 10Gi
+      storageClass: longhorn
+    resources:
+      requests:
+        cpu: 100m
+        memory: 512Mi
+      limits:
+        memory: 2Gi
+    containerSecurityContext:
+      runAsNonRoot: true
+      allowPrivilegeEscalation: false
+      capabilities:
+        drop: ["ALL"]
+      seccompProfile:
+        type: RuntimeDefault
+    # The theme. Everything below lands inside the /data volume, which is where
+    # Forgejo looks for anything that overrides what it ships (FORGEJO_CUSTOM is
+    # /data/gitea in this image):
+    #
+    #   custom/public/assets/...    fetched by the browser at /assets/...
+    #   custom/templates/...        replaces a page, or is included by one
+    #
+    # favicon.svg shadows the bundled icon because custom/public sits on the same
+    # URL (/assets/img/favicon.svg). The two logo files are new names on purpose:
+    # see the comment on #navbar-logo in theme/nebula.css.
+    extraVolumes:
+      - name: theme
+        configMap:
+          name: forgejo-theme
+    extraContainerVolumeMounts:
+      - name: theme
+        mountPath: /data/gitea/public/assets/css/nebula.css
+        subPath: nebula.css
+        readOnly: true
+      - name: theme
+        mountPath: /data/gitea/public/assets/img/favicon.svg
+        subPath: favicon.svg
+        readOnly: true
+      - name: theme
+        mountPath: /data/gitea/public/assets/img/nebula-navy.svg
+        subPath: logo-navy.svg
+        readOnly: true
+      - name: theme
+        mountPath: /data/gitea/public/assets/img/nebula-sky.svg
+        subPath: logo-sky.svg
+        readOnly: true
+      - name: theme
+        mountPath: /data/gitea/templates/custom/header.tmpl
+        subPath: header.tmpl
+        readOnly: true
+      - name: theme
+        mountPath: /data/gitea/templates/home.tmpl
+        subPath: home.tmpl
+        readOnly: true

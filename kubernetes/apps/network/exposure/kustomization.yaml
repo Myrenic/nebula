@@ -12,6 +12,7 @@ resources:
   - ./aiostreams.yaml
   - ./certificate.yaml
   - ./flux-operator.yaml
+  - ./forgejo.yaml
   - ./frigate.yaml
   - ./grafana.yaml
   - ./homeassistant.yaml

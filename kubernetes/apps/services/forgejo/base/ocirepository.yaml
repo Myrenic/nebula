@@ -1,0 +1,32 @@
+# The forge itself comes from the Forgejo project's own chart: it generates
+# app.ini, runs the migrations and creates the admin user, which is more moving
+# parts than an app-template Deployment should own. Its default image is the
+# -rootless variant, i.e. uid 1000, which is what the pod security context here
+# assumes everywhere else too.
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: OCIRepository
+metadata:
+  name: forgejo
+spec:
+  interval: 15m
+  layerSelector:
+    mediaType: application/vnd.cncf.helm.chart.content.v1.tar+gzip
+    operation: copy
+  ref:
+    tag: 17.1.7
+  url: oci://code.forgejo.org/forgejo-helm/forgejo
+---
+# Postgres, deployed the way this repository deploys Postgres: app-template,
+# next to the app it serves, not the chart's bundled subchart.
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: OCIRepository
+metadata:
+  name: forgejo-app-template
+spec:
+  interval: 15m
+  layerSelector:
+    mediaType: application/vnd.cncf.helm.chart.content.v1.tar+gzip
+    operation: copy
+  ref:
+    tag: 5.2.1
+  url: oci://ghcr.io/bjw-s-labs/helm/app-template

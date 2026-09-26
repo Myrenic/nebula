@@ -1,0 +1,79 @@
+{{/* The landing page for a visitor who is not signed in. Replaces Forgejo's
+     templates/home.tmpl, which is the one page this instance owns outright:
+     markup of our own, styled by the nebula- classes in nebula.css. Signed-in
+     users are sent to the dashboard by Forgejo itself and never see this.
+
+     A template override is tied to the Forgejo version it was written for - the
+     docs say so out loud - so this file is deliberately as small as a page can
+     be: head, a hero and four cards, footer. */}}
+{{template "base/head" .}}
+<div class="nebula-page">
+  <section class="nebula-hero">
+    <h1>Source code,<br>self-hosted</h1>
+    <p>Git repositories, pull requests, issues and code review, on hardware we run ourselves.</p>
+    <div class="nebula-ctas">
+      <a class="nebula-btn" href="{{AppSubUrl}}/explore/repos">Explore repositories</a>
+      {{if .IsSigned}}
+        <a class="nebula-btn nebula-btn-plain" href="{{AppSubUrl}}/dashboard">Your dashboard</a>
+      {{else}}
+        <a class="nebula-btn nebula-btn-plain" href="{{AppSubUrl}}/user/login">Sign in</a>
+      {{end}}
+    </div>
+  </section>
+  <div class="nebula-cards">
+    <div class="nebula-card">
+      <div class="nebula-icon">
+        <svg width="40" height="40" viewBox="0 0 40 40" fill="none" aria-hidden="true">
+          <g stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+            <circle cx="13" cy="10" r="4"/>
+            <circle cx="13" cy="30" r="4"/>
+            <circle cx="28" cy="20" r="4"/>
+            <path d="M13 14v12"/>
+            <path d="M13 20h11"/>
+          </g>
+        </svg>
+      </div>
+      <h3>Git hosting</h3>
+      <p>Repositories with pull requests, issues, code review and wikis. Clone over HTTPS with a personal access token.</p>
+    </div>
+    <div class="nebula-card">
+      <div class="nebula-icon">
+        <svg width="40" height="40" viewBox="0 0 40 40" fill="none" aria-hidden="true">
+          <g stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="8" y="9" width="24" height="9" rx="2"/>
+            <rect x="8" y="22" width="24" height="9" rx="2"/>
+            <path d="M13 13.5h.01"/>
+            <path d="M13 26.5h.01"/>
+          </g>
+        </svg>
+      </div>
+      <h3>Self-hosted</h3>
+      <p>Forgejo runs on the same three-node cluster as everything else here, and the repositories live on storage we control.</p>
+    </div>
+    <div class="nebula-card">
+      <div class="nebula-icon">
+        <svg width="40" height="40" viewBox="0 0 40 40" fill="none" aria-hidden="true">
+          <g stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M20 7l11 4v9c0 6.6-4.6 11-11 13-6.4-2-11-6.4-11-13v-9l11-4z"/>
+            <path d="M15.5 19.5l3.5 3.5 6-6.5"/>
+          </g>
+        </svg>
+      </div>
+      <h3>Accounts by hand</h3>
+      <p>Registration is closed. The admin creates every account, and repositories marked public stay readable to anyone.</p>
+    </div>
+    <div class="nebula-card">
+      <div class="nebula-icon">
+        <svg width="40" height="40" viewBox="0 0 40 40" fill="none" aria-hidden="true">
+          <g stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M15 13l-6 7 6 7"/>
+            <path d="M25 13l6 7-6 7"/>
+          </g>
+        </svg>
+      </div>
+      <h3>Open source</h3>
+      <p>Forgejo is AGPL-licensed, community-run git hosting: no feature gates, no telemetry, no vendor.</p>
+    </div>
+  </div>
+</div>
+{{template "base/footer" .}}

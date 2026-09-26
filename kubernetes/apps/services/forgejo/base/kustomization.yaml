@@ -1,0 +1,32 @@
+# yaml-language-server: $schema=https://json.schemastore.org/kustomization
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - ./ocirepository.yaml
+  - ./postgres-helmrelease.yaml
+  - ./helmrelease.yaml
+configMapGenerator:
+  # Forgejo serves the theme from its own filesystem - custom/public/assets for
+  # anything a browser fetches and custom/templates for the pages it renders - so
+  # the theme ships as a ConfigMap that the HelmRelease mounts over those paths.
+  # Files rather than a ConfigMap written out by hand, because these are source
+  # files: a stylesheet, two Go templates, three SVGs.
+  - name: forgejo-theme
+    files:
+      - theme/nebula.css
+      - theme/header.tmpl
+      - theme/home.tmpl
+      - theme/logo-navy.svg
+      - theme/logo-sky.svg
+      - theme/favicon.svg
+generatorOptions:
+  # The generator would otherwise suffix the name with a content hash, and
+  # kustomize only rewrites that suffix in the fields it knows - which does not
+  # include a HelmRelease's values, where the mounts are declared. With the hash
+  # on, the release would keep mounting the unsuffixed ConfigMap that Flux prunes.
+  # Off, the name is stable; a theme change is then applied by
+  # `kubectl -n services rollout restart deploy/forgejo`, because these are
+  # subPath mounts and the kubelet does not refresh those under a running pod.
+  disableNameSuffixHash: true
+  labels:
+    app.kubernetes.io/name: forgejo

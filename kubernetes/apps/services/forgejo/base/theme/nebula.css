@@ -1,0 +1,344 @@
+/* nebula.css - the look of this forge.
+ *
+ * Loaded last in <head>, by templates/custom/header.tmpl, so it sits on top of
+ * whichever theme Forgejo picked (forgejo-auto by default, in both its light and
+ * its dark variant). Two mechanisms, on purpose:
+ *
+ *   - Forgejo 15 draws links, buttons, tabs, badges and the navigation bar from
+ *     the --color-primary ramp and from --color-nav-bg. Redefining those
+ *     recolours the whole application at once, and keeps working when Forgejo
+ *     changes its markup. Nothing below needs !important for that reason.
+ *   - The landing page (templates/home.tmpl, ours) uses classes prefixed
+ *     nebula- and is styled here from scratch.
+ *
+ * The palette is two blues: navy for text, borders and buttons, sky for the
+ * surfaces that carry the brand. --color-primary-dark-N / -light-N keep the
+ * shape of Forgejo's own ramp (the N-th step away from the base colour), which
+ * is what the derived variables in index.css and the theme expect.
+ *
+ * The dark half is behind prefers-color-scheme, which is how forgejo-auto
+ * switches. A user who picks forgejo-dark by hand on a light machine never
+ * reaches that query, so the same list appears a second time under
+ * html[data-theme$="dark"], which outranks :root. The two dark blocks are
+ * deliberately the same declarations twice: a media query cannot be combined
+ * with an attribute selector, and they must stay in step.
+ */
+
+:root {
+  /* Palette. */
+  --nebula-navy-900: #06213b;
+  --nebula-navy-800: #0a2f52;
+  --nebula-navy-700: #0d3b66;
+  --nebula-blue-600: #1d6fa5;
+  --nebula-blue-500: #2b86bd;
+  --nebula-sky-400: #5aabd9;
+  --nebula-sky-300: #8ec8e8;
+  --nebula-sky-200: #a6d5ef;
+  --nebula-sky-100: #cfe8f7;
+  --nebula-sky-50: #eaf5fc;
+
+  /* Forgejo's primary ramp, light. --color-primary-hover, -active, -contrast,
+     --color-accent, --color-highlight-* and --color-small-accent are all
+     declared upstream as var() references into this ramp, so they follow. */
+  --color-primary: var(--nebula-blue-600);
+  --color-primary-contrast: #ffffff;
+  --color-primary-dark-1: #1d6fa5;
+  --color-primary-dark-2: #175a86;
+  --color-primary-dark-3: #175a86;
+  --color-primary-dark-4: #12486b;
+  --color-primary-dark-5: #12486b;
+  --color-primary-dark-6: #12486b;
+  --color-primary-dark-7: #12486b;
+  --color-primary-light-1: #2b86bd;
+  --color-primary-light-2: #3d97cc;
+  --color-primary-light-3: #5aabd9;
+  --color-primary-light-4: #8ec8e8;
+  --color-primary-light-5: #a6d5ef;
+  --color-primary-light-6: #cfe8f7;
+  --color-primary-light-7: #eaf5fc;
+  --color-primary-alpha-10: #1d6fa519;
+  --color-primary-alpha-20: #1d6fa533;
+  --color-primary-alpha-30: #1d6fa54b;
+  --color-primary-alpha-40: #1d6fa566;
+  --color-primary-alpha-50: #1d6fa580;
+  --color-primary-alpha-60: #1d6fa599;
+  --color-primary-alpha-70: #1d6fa5b3;
+  --color-primary-alpha-80: #1d6fa5cc;
+  --color-primary-alpha-90: #1d6fa5e1;
+
+  /* The navigation bar: #navbar in index.css is background: var(--color-nav-bg)
+     with var(--color-nav-hover-bg) for the items, so the bar is branded without
+     touching Forgejo's markup. Its text is --color-text, which reads on both the
+     sky of the light theme and the navy of the dark one. */
+  --color-nav-bg: var(--nebula-sky-200);
+  --color-nav-hover-bg: var(--nebula-sky-100);
+
+  /* Landing page. */
+  --nebula-border: #e0e0e0;
+  --nebula-heading: var(--nebula-navy-700);
+  --nebula-muted: #555555;
+  --nebula-hero-bg: var(--nebula-sky-200);
+  --nebula-hero-fg: var(--nebula-navy-900);
+  --nebula-hero-lead: #12486b;
+  --nebula-btn-bg: var(--nebula-navy-700);
+  --nebula-btn-fg: #ffffff;
+  --nebula-btn-hover-bg: var(--nebula-navy-800);
+  --nebula-icon: var(--nebula-blue-600);
+  --nebula-logo: url("/assets/img/nebula-navy.svg");
+}
+
+/* The bar's own border would draw a grey line under a blue surface. */
+#navbar {
+  border-bottom: none;
+}
+
+/* The stock mark is orange and red; these are the same three strokes in the two
+   blues. The <img> has to go because an SVG in an <img> cannot inherit a colour
+   from the page - hence two files and a background, one per half of the theme. */
+#navbar-logo img {
+  display: none;
+}
+
+#navbar-logo::after {
+  content: "";
+  display: block;
+  width: 30px;
+  height: 30px;
+  background-image: var(--nebula-logo);
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: contain;
+}
+
+/* Landing page. Square corners and Arial, the way the government code platform
+   this is modelled on looks; nothing here inherits Forgejo's page padding, so
+   the hero runs the full width of the window. */
+.nebula-page {
+  font-family: Arial, Helvetica, sans-serif;
+  background: var(--color-body);
+}
+
+.nebula-hero {
+  background: var(--nebula-hero-bg);
+  text-align: center;
+  padding: 64px 32px 52px;
+}
+
+.nebula-hero h1 {
+  font-size: 64px;
+  font-weight: 700;
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+  color: var(--nebula-hero-fg);
+  margin-bottom: 16px;
+}
+
+.nebula-hero p {
+  font-size: 16px;
+  line-height: 1.65;
+  color: var(--nebula-hero-lead);
+  max-width: 620px;
+  margin: 0 auto 28px;
+}
+
+.nebula-ctas {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.nebula-btn {
+  background: var(--nebula-btn-bg);
+  color: var(--nebula-btn-fg);
+  font-weight: 700;
+  font-size: 14px;
+  padding: 12px 26px;
+  display: inline-block;
+}
+
+.nebula-btn:hover {
+  background: var(--nebula-btn-hover-bg);
+  color: var(--nebula-btn-fg);
+}
+
+.nebula-btn-plain {
+  background: transparent;
+  color: var(--nebula-hero-fg);
+  box-shadow: inset 0 0 0 1.5px currentColor;
+}
+
+.nebula-btn-plain:hover {
+  background: transparent;
+  color: var(--nebula-hero-fg);
+  box-shadow: inset 0 0 0 2px currentColor;
+}
+
+.nebula-cards {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  border-top: 1px solid var(--nebula-border);
+}
+
+.nebula-card {
+  padding: 32px 24px;
+  border-right: 1px solid var(--nebula-border);
+}
+
+.nebula-card:last-child {
+  border-right: none;
+}
+
+.nebula-icon {
+  color: var(--nebula-icon);
+  margin-bottom: 16px;
+}
+
+.nebula-card h3 {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--nebula-heading);
+  line-height: 1.35;
+  margin-bottom: 10px;
+}
+
+.nebula-card p {
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--nebula-muted);
+}
+
+/* Forgejo underlines links on hover and paints them in --color-primary. */
+.nebula-page a,
+.nebula-page a:hover {
+  text-decoration: none;
+}
+
+@media (max-width: 900px) {
+  .nebula-hero {
+    padding: 48px 24px 40px;
+  }
+
+  .nebula-hero h1 {
+    font-size: 42px;
+  }
+
+  .nebula-cards {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .nebula-card:nth-child(2n) {
+    border-right: none;
+  }
+}
+
+@media (max-width: 560px) {
+  .nebula-hero h1 {
+    font-size: 28px;
+  }
+
+  .nebula-cards {
+    grid-template-columns: 1fr;
+  }
+
+  .nebula-card,
+  .nebula-card:nth-child(2n) {
+    border-right: none;
+    border-bottom: 1px solid var(--nebula-border);
+  }
+
+  .nebula-card:last-child {
+    border-bottom: none;
+  }
+}
+
+/* Dark, for a user who chose forgejo-dark in their settings. */
+html[data-theme$="dark"] {
+  --color-primary: #8ec8e8;
+  --color-primary-contrast: #0a2f52;
+  --color-primary-dark-1: #a6d5ef;
+  --color-primary-dark-2: #a6d5ef;
+  --color-primary-dark-3: #cfe8f7;
+  --color-primary-dark-4: #cfe8f7;
+  --color-primary-dark-5: #eaf5fc;
+  --color-primary-dark-6: #eaf5fc;
+  --color-primary-dark-7: #f4fbff;
+  --color-primary-light-1: #5aabd9;
+  --color-primary-light-2: #3d97cc;
+  --color-primary-light-3: #2b86bd;
+  --color-primary-light-4: #1d6fa5;
+  --color-primary-light-5: #1d6fa5;
+  --color-primary-light-6: #175a86;
+  --color-primary-light-7: #175a86;
+  --color-primary-alpha-10: #3d97cc19;
+  --color-primary-alpha-20: #3d97cc33;
+  --color-primary-alpha-30: #3d97cc4b;
+  --color-primary-alpha-40: #3d97cc66;
+  --color-primary-alpha-50: #3d97cc80;
+  --color-primary-alpha-60: #3d97cc99;
+  --color-primary-alpha-70: #3d97ccb3;
+  --color-primary-alpha-80: #3d97cccc;
+  --color-primary-alpha-90: #3d97cce1;
+
+  --color-nav-bg: var(--nebula-navy-700);
+  --color-nav-hover-bg: #175a86;
+
+  --nebula-border: #24384c;
+  --nebula-heading: var(--nebula-sky-200);
+  --nebula-muted: #9fb6c6;
+  --nebula-hero-bg: var(--nebula-navy-700);
+  --nebula-hero-fg: #ffffff;
+  --nebula-hero-lead: var(--nebula-sky-100);
+  --nebula-btn-bg: var(--nebula-sky-200);
+  --nebula-btn-fg: var(--nebula-navy-900);
+  --nebula-btn-hover-bg: var(--nebula-sky-100);
+  --nebula-icon: var(--nebula-sky-300);
+  --nebula-logo: url("/assets/img/nebula-sky.svg");
+}
+
+/* Dark, for forgejo-auto on a machine that asks for it. Same declarations as
+   the block above, which this one cannot share. */
+@media (prefers-color-scheme: dark) {
+  html[data-theme$="auto"] {
+    --color-primary: #8ec8e8;
+    --color-primary-contrast: #0a2f52;
+    --color-primary-dark-1: #a6d5ef;
+    --color-primary-dark-2: #a6d5ef;
+    --color-primary-dark-3: #cfe8f7;
+    --color-primary-dark-4: #cfe8f7;
+    --color-primary-dark-5: #eaf5fc;
+    --color-primary-dark-6: #eaf5fc;
+    --color-primary-dark-7: #f4fbff;
+    --color-primary-light-1: #5aabd9;
+    --color-primary-light-2: #3d97cc;
+    --color-primary-light-3: #2b86bd;
+    --color-primary-light-4: #1d6fa5;
+    --color-primary-light-5: #1d6fa5;
+    --color-primary-light-6: #175a86;
+    --color-primary-light-7: #175a86;
+    --color-primary-alpha-10: #3d97cc19;
+    --color-primary-alpha-20: #3d97cc33;
+    --color-primary-alpha-30: #3d97cc4b;
+    --color-primary-alpha-40: #3d97cc66;
+    --color-primary-alpha-50: #3d97cc80;
+    --color-primary-alpha-60: #3d97cc99;
+    --color-primary-alpha-70: #3d97ccb3;
+    --color-primary-alpha-80: #3d97cccc;
+    --color-primary-alpha-90: #3d97cce1;
+
+    --color-nav-bg: var(--nebula-navy-700);
+    --color-nav-hover-bg: #175a86;
+
+    --nebula-border: #24384c;
+    --nebula-heading: var(--nebula-sky-200);
+    --nebula-muted: #9fb6c6;
+    --nebula-hero-bg: var(--nebula-navy-700);
+    --nebula-hero-fg: #ffffff;
+    --nebula-hero-lead: var(--nebula-sky-100);
+    --nebula-btn-bg: var(--nebula-sky-200);
+    --nebula-btn-fg: var(--nebula-navy-900);
+    --nebula-btn-hover-bg: var(--nebula-sky-100);
+    --nebula-icon: var(--nebula-sky-300);
+    --nebula-logo: url("/assets/img/nebula-sky.svg");
+  }
+}
