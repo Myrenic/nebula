@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: velero
+  annotations:
+    kustomize.toolkit.fluxcd.io/prune: disabled
+  labels:
+    # privileged on purpose: the node-agent DaemonSet reads pod volumes straight
+    # off the host through /var/lib/kubelet/pods and runs as root to do it. A
+    # backup layer that cannot read the volume it is meant to protect is worse
+    # than none, so this namespace is the one place where privileged is honest.
+    pod-security.kubernetes.io/enforce: privileged

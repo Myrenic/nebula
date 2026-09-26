@@ -47,7 +47,11 @@ spec:
       # the account on a first sign-in. (Checked against the authorize URL:
       # scope=openid email profile.)
       oauth:
-        - name: keycloak
+        # The name is not only a label: it is the URL segment of the callback
+        # (/user/oauth2/Keycloak/callback, which is the client's one redirect URI)
+        # and the text Forgejo puts on the sign-in button, which is why it is
+        # spelled the way a proper noun is.
+        - name: Keycloak
           provider: openidConnect
           key: forgejo
           secret: "${FORGEJO_OAUTH_CLIENT_SECRET}"
@@ -89,6 +93,13 @@ spec:
       enabled: true
       size: 10Gi
       storageClass: longhorn
+      # The chart creates gitea-shared-storage, and without this it is the one
+      # object a forge restore cannot find: everything else the forge owns
+      # carries app.kubernetes.io/name, so a restore selected by that label
+      # would bring back Forgejo and its postgres while silently leaving the
+      # repositories behind. Labelling the claim puts it in the same selector.
+      labels:
+        app.kubernetes.io/name: forgejo
     resources:
       requests:
         cpu: 100m

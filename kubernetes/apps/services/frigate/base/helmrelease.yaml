@@ -107,6 +107,14 @@ spec:
                   timeoutSeconds: 15
                   failureThreshold: 3
     defaultPodOptions:
+      annotations:
+        # The one volume in auth+services that is not worth an off-site copy:
+        # `media` is ~70 GiB of camera recordings against ~11 GiB for everything
+        # else in those namespaces combined. Excluding it by name (rather than
+        # selecting the apps that *are* backed up) keeps the backup fail-open:
+        # a container added later is protected by default, and this line is the
+        # only thing that has to be reconsidered when it is not wanted.
+        backup.velero.io/backup-volumes-excludes: media
       # Frigate needs an Intel iGPU for VA-API/QSV (LIBVA_DRIVER_NAME=iHD);
       # AMD nodes have no /dev/dri render node it can use.
       nodeSelector:

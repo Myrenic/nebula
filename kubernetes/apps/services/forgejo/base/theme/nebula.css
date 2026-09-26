@@ -92,6 +92,17 @@
   border-bottom: none;
 }
 
+/* Forgejo's OpenID Connect icon is orange and grey on the sign-in buttons it
+   generates for the Keycloak source; it is inline SVG, so it can be recoloured
+   without touching the template that renders it. */
+.oauth-login-link svg.gitea-openid path[fill="#ff7c00"] {
+  fill: var(--nebula-blue-500);
+}
+
+.oauth-login-link svg.gitea-openid path[fill="#aaa"] {
+  fill: var(--nebula-sky-400);
+}
+
 /* The stock mark is orange and red; these are the same three strokes in the two
    blues. The <img> has to go because an SVG in an <img> cannot inherit a colour
    from the page - hence two files and a background, one per half of the theme. */

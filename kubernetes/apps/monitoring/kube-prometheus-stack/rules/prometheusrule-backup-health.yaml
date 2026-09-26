@@ -1,0 +1,133 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: backup-health
+  labels:
+    release: kube-prometheus-stack
+spec:
+  groups:
+    - name: velero-backup-health
+      rules:
+        # The three rules that would have caught the last failure go first. That
+        # installation sat Unavailable for weeks and every schedule failed without
+        # anyone being told, so "the backup is not running" has to be as loud as
+        # "the site is down".
+        - alert: VeleroBackupStorageLocationUnavailable
+          expr: velero_backup_location_status_gauge < 1
+          for: 15m
+          labels:
+            severity: critical
+          annotations:
+            summary: Velero cannot reach its backup storage
+            description: >-
+              Backup storage location {{ $labels.backup_location_name }} has
+              reported unavailable for 15 minutes. Backups are not being written
+              anywhere off-cluster until this clears.
+        - alert: VeleroBackupLayerMissing
+          # Deliberately absent(), not a threshold. Every other rule in this file
+          # is fed by Velero's own metrics, so if Velero is removed or its
+          # deployment is scaled to zero, the metrics disappear and the remaining
+          # rules go quiet while looking healthy. This is the rule that notices
+          # silence. The eight-hour window is what makes the alert meaningful:
+          # scraping stops and starts during an ordinary pod restart.
+          expr: absent(velero_backup_location_status_gauge)
+          for: 8h
+          labels:
+            severity: critical
+          annotations:
+            summary: Velero is not reporting any backup metrics
+            description: >-
+              No velero_backup_location_status_gauge series has been scraped for
+              8 hours. The backup layer is gone or not being scraped, which is
+              indistinguishable from a healthy backup until a restore is needed.
+        - alert: VeleroBackupStale
+          # Per-schedule thresholds rather than a derived interval. There is no
+          # velero_schedule_expected_interval_seconds metric to divide by (the
+          # rule this replaces referenced one and could therefore never fire), and
+          # each schedule here has a different period, so the expected age is
+          # written out where it can be read.
+          expr: |-
+            (time() - velero_backup_last_successful_timestamp{schedule="apps-daily"} > 30 * 3600)
+            or
+            (time() - velero_backup_last_successful_timestamp{schedule="apps-monthly"} > 35 * 24 * 3600)
+          for: 1h
+          labels:
+            severity: critical
+          annotations:
+            summary: Velero backup is stale
+            description: >-
+              Schedule {{ $labels.schedule }} has not completed a successful
+              backup within its expected window (30h for daily, 35d for monthly).
+        - alert: VeleroBackupFailing
+          expr: |-
+            velero_backup_last_status == 0
+            or
+            increase(velero_backup_failure_total[6h]) > 0
+            or
+            increase(velero_backup_partial_failure_total[6h]) > 0
+            or
+            increase(velero_backup_validation_failure_total[6h]) > 0
+          for: 15m
+          labels:
+            severity: critical
+          annotations:
+            summary: Velero backup reported failures
+            description: >-
+              Schedule {{ $labels.schedule }} has recorded a failed, partial or
+              unvalidated backup in the last 6 hours.
+        - alert: VeleroBackupNeverSucceeded
+          # A schedule that has been enabled long enough to have run but has no
+          # success timestamp at all. Sits under VeleroBackupStale for a broken
+          # fresh install, where there is no last-success to be stale.
+          expr: |-
+            increase(velero_backup_attempt_total{schedule="apps-daily"}[6h]) > 0
+            unless on (schedule)
+            velero_backup_last_successful_timestamp{schedule="apps-daily"} > 0
+          for: 15m
+          labels:
+            severity: critical
+          annotations:
+            summary: Velero has never completed a backup
+            description: >-
+              Schedule {{ $labels.schedule }} has attempted backups in the last 6
+              hours but has no successful backup timestamp. Every backup so far
+              has failed.
+        - alert: VeleroNodeAgentUnavailable
+          # The node-agent is the data path: it is what reads volume contents off
+          # the node. With defaultVolumesToFsBackup on, a backup still completes
+          # and reports success when the node-agent is down, but carries no volume
+          # data. That is the exact shape of a backup that only fails when used.
+          expr: |-
+            kube_daemonset_status_number_ready{namespace="velero", daemonset="node-agent"}
+            <
+            kube_daemonset_status_desired_number_scheduled{namespace="velero", daemonset="node-agent"}
+          for: 30m
+          labels:
+            severity: critical
+          annotations:
+            summary: Velero node-agent is not ready on every node
+            description: >-
+              The Velero node-agent DaemonSet has
+              {{ $value }} fewer ready pods than desired. Volume data is not being
+              captured, so backups complete without containing any PVC contents.
+        - alert: VeleroServerUnavailable
+          expr: |-
+            kube_deployment_spec_replicas{namespace="velero", deployment="velero"} > 0
+            and
+            kube_deployment_status_replicas_available{namespace="velero", deployment="velero"} < 1
+          for: 15m
+          labels:
+            severity: critical
+          annotations:
+            summary: Velero server is unavailable
+            description: The velero deployment has had no available replicas for 15 minutes.
+        - alert: VeleroRepositoryMaintenanceFailing
+          expr: increase(velero_repo_maintenance_failure_total[24h]) > 0
+          for: 15m
+          labels:
+            severity: warning
+          annotations:
+            summary: Velero repository maintenance is failing
+            description: >-
+              Kopia repository maintenance has failed in the last 24 hours.
+              Backups keep working until the repository needs the space back.

@@ -2,6 +2,9 @@ apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:
   - common
+  # The backup layer. Applied this early so its namespace exists before the
+  # Flux Kustomization that reconciles into it.
+  - backup
   - flux-system
   - cert-manager
   - network

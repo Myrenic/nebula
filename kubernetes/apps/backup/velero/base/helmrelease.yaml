@@ -1,0 +1,200 @@
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: velero
+spec:
+  interval: 1h
+  chart:
+    spec:
+      chart: velero
+      version: 12.2.0
+      sourceRef:
+        kind: HelmRepository
+        name: velero
+      interval: 15m
+  install:
+    crds: CreateReplace
+    remediation:
+      retries: 3
+  upgrade:
+    crds: CreateReplace
+    remediation:
+      retries: 3
+  postRenderers:
+    # The chart exposes affinity natively, but not topology spread constraints.
+    # Keep spread on the Deployment only so Helm's rendered manifest stays targeted.
+    - kustomize:
+        patches:
+          - target:
+              kind: Deployment
+              name: velero
+            patch: |
+              - op: replace
+                path: /spec/replicas
+                value: 1
+              - op: replace
+                path: /spec/strategy
+                value:
+                  type: RollingUpdate
+                  rollingUpdate:
+                    maxSurge: 0
+                    maxUnavailable: 1
+              - op: add
+                path: /spec/template/spec/topologySpreadConstraints
+                value:
+                  - maxSkew: 1
+                    topologyKey: kubernetes.io/hostname
+                    whenUnsatisfiable: ScheduleAnyway
+                    labelSelector:
+                      matchLabels:
+                        name: velero
+  values:
+    # Flux manages CRD updates via upgrade.crds: CreateReplace; disable the
+    # chart's own pre-upgrade hook job so it cannot dead-lock on a small cluster.
+    upgradeCRDs: false
+
+    credentials:
+      useSecret: true
+      existingSecret: velero-credentials
+
+    initContainers:
+      - name: velero-plugin-for-microsoft-azure
+        image: velero/velero-plugin-for-microsoft-azure:v1.14.3
+        imagePullPolicy: IfNotPresent
+        volumeMounts:
+          - mountPath: /target
+            name: plugins
+
+    configuration:
+      backupStorageLocation:
+        - name: default
+          provider: azure
+          bucket: velero
+          default: true
+          credential:
+            name: velero-credentials
+            key: cloud
+          config:
+            # The blob container lives beside this cluster's other off-site copy
+            # (the fileserver's Immich dumps) in an account that is in current use,
+            # rather than a purpose-made one: the previous account and its resource
+            # group were deleted, which is what left the old location Unavailable
+            # for weeks and every schedule failing silently.
+            resourceGroup: rg-fileserver-backup
+            storageAccount: tuntelderbackupee3949
+            # Without this the plugin ignores the access key in the secret and
+            # falls back to Azure AD, which then needs a service principal that
+            # can expire. The old installation did exactly that: its client
+            # secret lapsed on 2026-09-21. A storage key does not expire, and
+            # telling the plugin to use it keeps the whole auth path to one
+            # secret with one rotation step.
+            storageAccountKeyEnvVar: AZURE_STORAGE_ACCOUNT_ACCESS_KEY
+      defaultBackupStorageLocation: default
+      defaultBackupTTL: 168h0m0s
+      # Copy volume contents with Kopia instead of CSI snapshots. This cluster
+      # has no snapshot.storage.k8s.io CRDs at all (Longhorn v1 volumes), so
+      # snapshot-based backup is not an option here; file-system backup is what
+      # makes a PVC restore possible.
+      defaultVolumesToFsBackup: true
+      uploaderType: kopia
+      backupSyncPeriod: 15m
+      defaultRepoMaintainFrequency: 24h
+      repositoryMaintenanceJob:
+        repositoryConfigData:
+          global:
+            keepLatestMaintenanceJobs: 3
+
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits:
+        memory: 1Gi
+
+    # Soft anti-affinity: spreads replicas across nodes when the cluster has room,
+    # but never blocks scheduling.
+    affinity:
+      podAntiAffinity:
+        preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              topologyKey: kubernetes.io/hostname
+              labelSelector:
+                matchLabels:
+                  name: velero
+
+    extraObjects:
+      - apiVersion: policy/v1
+        kind: PodDisruptionBudget
+        metadata:
+          name: velero
+        spec:
+          # Deliberately 0. There is one replica, and node drains are a routine
+          # operation on this cluster (see the failure drill in the README); a
+          # higher value would block them to protect a pod that restarts in
+          # seconds. Monitoring, not the PDB, is what catches a Velero that is
+          # down.
+          minAvailable: 0
+          selector:
+            matchLabels:
+              name: velero
+
+    backupsEnabled: true
+    # No volume snapshots: there is no snapshot StorageClass in this cluster and
+    # the Azure plugin cannot snapshot Longhorn volumes anyway. Setting this
+    # false is what keeps Velero from reporting perfectly healthy backups that
+    # contain no volume data.
+    snapshotsEnabled: false
+    deployNodeAgent: true
+
+    metrics:
+      enabled: true
+      serviceMonitor:
+        enabled: true
+
+    # fs-restore-action-config tells Velero which image to inject as the
+    # restore-helper init container during file-system (kopia) restores. Since
+    # v1.14 velero-restore-helper is merged into the main velero image; without
+    # this ConfigMap Velero falls back to the non-existent
+    # "velero-restore-helper" image name and every PVC restore fails while the
+    # backup side still looks fine.
+    configMaps:
+      fs-restore-action-config:
+        labels:
+          velero.io/plugin-config: ""
+          velero.io/pod-volume-restore: RestoreItemAction
+        data:
+          image: docker.io/velero/velero:v1.18.2
+
+    schedules:
+      # Scoped to whole namespaces, and deliberately NOT to a label selector.
+      #
+      # A selector cannot see the things this backup most needs to hold. Three
+      # credentials exist only in the cluster and are in no manifest and no git
+      # revision: keycloak-webui-oauth (auth), mushroom-finder-db and
+      # lucian-ghost-backup (services). They carry no labels at all, so any
+      # selector-shaped backup would silently drop exactly the unrecoverable
+      # objects. Namespaces capture everything; what is excluded is decided
+      # below, on the volume side, where exclusion is visible in the app itself.
+      #
+      # Volume contents come along for every pod in these namespaces except the
+      # ones that opt out (frigate excludes its recordings volume). Kopia stores
+      # used bytes, so in practice this is roughly 11 GiB, dominated by nothing
+      # in particular: frigate's recordings are the only volume worth leaving
+      # out, and they are 70 GiB of it.
+      apps-daily:
+        schedule: "13 2 * * *"
+        template:
+          ttl: 168h0m0s
+          storageLocation: default
+          includedNamespaces:
+            - auth
+            - services
+      apps-monthly:
+        schedule: "13 4 1 * *"
+        template:
+          ttl: 1440h0m0s
+          storageLocation: default
+          includedNamespaces:
+            - auth
+            - services
