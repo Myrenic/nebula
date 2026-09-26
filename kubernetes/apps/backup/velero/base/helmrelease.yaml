@@ -151,6 +151,14 @@ spec:
       enabled: true
       serviceMonitor:
         enabled: true
+        # Load-bearing. Prometheus here selects ServiceMonitors by
+        # `release: kube-prometheus-stack` (serviceMonitorSelector is an exact
+        # match, not "all monitors"), so a ServiceMonitor without this label is
+        # created, looks healthy, and is never scraped. That is a monitoring
+        # layer that reports nothing while appearing to be in place - which is
+        # the same shape as the failure this whole directory exists to catch.
+        additionalLabels:
+          release: kube-prometheus-stack
 
     # fs-restore-action-config tells Velero which image to inject as the
     # restore-helper init container during file-system (kopia) restores. Since
@@ -158,6 +166,17 @@ spec:
     # this ConfigMap Velero falls back to the non-existent
     # "velero-restore-helper" image name and every PVC restore fails while the
     # backup side still looks fine.
+    #
+    # secCtxRunAsUser is not decoration. When this ConfigMap sets none of the
+    # secCtx* keys, Velero copies the application container's securityContext
+    # onto its own restore init container
+    # (pkg/restore/actions/pod_volume_restore_action.go). Every app here runs
+    # runAsNonRoot: true, and the Velero image's USER is the non-numeric "cnb",
+    # so the kubelet rejects that container with "cannot verify user is non-root"
+    # and the restore sits in Init:CreateContainerConfigError forever - for every
+    # app in the cluster. A numeric uid makes the kubelet's check a comparison
+    # again. 1000 is Velero's own default (restoreHelperUID), so naming it here
+    # restores the behaviour it would have had if the app had set nothing.
     configMaps:
       fs-restore-action-config:
         labels:
@@ -165,6 +184,7 @@ spec:
           velero.io/pod-volume-restore: RestoreItemAction
         data:
           image: docker.io/velero/velero:v1.18.2
+          secCtxRunAsUser: "1000"
 
     schedules:
       # Scoped to whole namespaces, and deliberately NOT to a label selector.

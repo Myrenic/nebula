@@ -44,8 +44,31 @@ use `--status-selector ready=true` when you want only the ready ones.
 `/usr/bin/kubectl` segfaults. Use `/usr/local/bin/kubectl` (v1.36.3) or run
 `hash -r` first so the shell picks up the working binary.
 
-## Still broken: no backup safety net
+## Backups are back, and the way they fail is silent
 
-Pre-existing and untouched: Velero's `backupstoragelocation/default` is
-`Unavailable` (19+ days) and `velero-ui` crashloops. There is therefore **no
-backup safety net**.
+Velero runs again (`kubernetes/apps/backup`), authenticating to Azure Blob with a
+storage account access key against `tuntelderbackupee3949`. The previous
+installation was removed because `backupstoragelocation/default` was `Unavailable`
+for weeks while every schedule failed: the resource group and storage account it
+pointed at had been deleted, and its service principal secret expired the same day
+the config was deleted.
+
+Two traps that do not announce themselves:
+
+- **`kubectl get backup` is not Velero's.** Longhorn also has a `backups` CRD, and
+  the short name resolves to `backups.longhorn.io`, which answers "not found" in
+  the `velero` namespace and looks like a backup that vanished. Always use
+  `backups.velero.io`, `restores.velero.io`, `podvolumebackups.velero.io`.
+- **A skipped volume is not a failed backup.** If a pod is not running when the
+  schedule fires, Velero skips its volume and still reports `Completed`. The list
+  lives in `volumeInfo`, which is only in the object store, so it takes
+  `velero backup describe <name> --details` to see it. This has already happened
+  once (Forgejo mid-rollout), and it is the reason a `Completed` backup is not on
+  its own evidence that the data is in it.
+
+The alert rules for this are in
+`kubernetes/apps/monitoring/kube-prometheus-stack/rules/prometheusrule-backup-health.yaml`.
+Note that `velero_schedule_expected_interval_seconds` does not exist - the previous
+staleness rule divided by it and could therefore never fire, which is part of why
+the old failure went unnoticed. The current rule writes each schedule's expected
+period out instead.

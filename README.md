@@ -5,8 +5,10 @@ by an Omni cluster template, every workload by Flux, every secret by SOPS + age.
 Push to `main` and the cluster converges. Nothing is configured by hand.
 
 Three nodes is enough to be interesting and few enough to stay honest about the
-limits: there is no live migration, no backup layer, and one node holds most of the
-storage. Those limits are written down here instead of being discovered later.
+limits: there is no live migration, one node holds most of the storage, and the
+backup layer is young enough that its restore path has been drilled rather than
+proven over years. Those limits are written down here instead of being discovered
+later.
 
 ## What runs here
 
@@ -286,14 +288,33 @@ kubectl -n services rollout status deploy/mytops-webui --timeout=180s
 
 ## Operating notes
 
-- **There is no backup layer right now.** Velero (with an Azure Blob location) was
-  removed after its `backupstoragelocation/default` sat `Unavailable` for weeks, so
-  every scheduled backup had been failing - a false sense of safety rather than a
-  backup. State lives on Longhorn volumes with one replica by default and two where
-  it matters; a node loss is survivable, a bad `kubectl delete` is not. Deleted
-  objects come back from git only if Flux manages them. If a backup layer returns it
-  must prove `Available`, and be verified by restoring one app into a scratch
-  namespace, before anything trusts it.
+- **Backup layer: Velero to Azure Blob.** The previous installation was removed on
+  2026-09-21 after `backupstoragelocation/default` sat `Unavailable` for weeks, so
+  every schedule had been failing silently. Two things had gone wrong, and both are
+  addressed rather than re-pinned: the location pointed at resource group
+  `Velero_Backups` and storage account `velero76b1f66a064d`, **neither of which
+  exists in the subscription any more**; and its service principal's `velero` client
+  secret expired on 2026-09-21, six months after it was created. What runs now
+  authenticates with a storage account access key (`storageAccountKeyEnvVar:
+  AZURE_STORAGE_ACCOUNT_ACCESS_KEY`) against an account that is in current use -
+  `tuntelderbackupee3949`, already holding the fileserver's Immich dumps - so
+  there is no expiring principal and no Azure AD role in the path. Two schedules,
+  `apps-daily` (02:13, 7-day TTL) and `apps-monthly` (1st, 04:13, 60-day TTL),
+  cover the whole `auth` and `services` namespaces and copy volume contents with
+  Kopia: this cluster has no `snapshot.storage.k8s.io` CRDs at all, so
+  `snapshotsEnabled` is false and file-system backup is the only way a volume can
+  come back.
+  Scope is by **namespace, not by label**, and that is load-bearing: three
+  credentials exist only in the cluster and in no manifest -
+  `keycloak-webui-oauth`, `mushroom-finder-db` and `lucian-ghost-backup` - so any
+  selector-shaped backup would silently skip the objects nothing else can replace.
+  `frigate-media` opts its ~70 GiB of recordings out with
+  `backup.velero.io/backup-volumes-excludes`; the rest of those namespaces is about
+  11 GiB. Monitoring in `rules/prometheusrule-backup-health.yaml` alerts on an
+  unavailable location, a stale schedule, a failing backup, a node-agent that is
+  not ready on every node, and - deliberately - on the metric going missing
+  entirely, which is what happens when the layer is quietly uninstalled. See
+  "Restore an app" under Drills and cadence.
 - **Storage.** `defaultReplicaCount` and `defaultClassReplicaCount` are 1; the
   `longhorn-2-replicas` StorageClass is used where a second copy is worth the disk.
   The `longhorn-replica-adjuster` CronJob converges existing volumes to 2 replicas
@@ -330,7 +351,8 @@ kubectl -n services rollout status deploy/mytops-webui --timeout=180s
   ```
 
   Flux restores what is in git. Data on PVCs is not part of that: a deleted PVC
-  comes back empty.
+  comes back empty. For the data, and for the three credentials that are in no
+  manifest, see "Restore an app" under Drills and cadence.
 
 ## Drills and cadence
 
@@ -339,15 +361,94 @@ Longhorn replica policy still matches the risk, and that a stateful app survives
 pod reschedule. Monthly: run the failure drill below and write down what happened.
 Act the same day, in git.
 
+### Restore an app
+
+Two different things can be "restored", and they have different sources: the
+manifests come from git, the data comes from Velero. Flux already puts the
+manifests back, so a restore is normally about the volume contents and the three
+credentials that exist in no manifest.
+
+```bash
+# What is there to restore from. Note the resource is `backups.velero.io`:
+# `backups` alone resolves to Longhorn's CRD and answers "not found" while
+# looking perfectly successful.
+kubectl -n velero get backups.velero.io
+```
+
+Whole-backup restore - every app in `auth` and `services`, PVCs recreated and
+repopulated, no manual PV work:
+
+```bash
+kubectl -n velero create -f - <<'EOF'
+apiVersion: velero.io/v1
+kind: Restore
+metadata:
+  name: restore-all
+spec:
+  backupName: apps-daily-20260927021301   # from the list above
+EOF
+```
+
+One app, into a scratch namespace (this is the command the drill below runs):
+
+```bash
+kubectl create namespace forgejo-restore
+
+kubectl -n velero create -f - <<'EOF'
+apiVersion: velero.io/v1
+kind: Restore
+metadata:
+  name: forgejo-restore
+spec:
+  backupName: apps-daily-20260927021301
+  includedNamespaces: [services]
+  orLabelSelectors:
+    - matchLabels:
+        app.kubernetes.io/name: forgejo
+    - matchLabels:
+        app.kubernetes.io/name: forgejo-postgres
+  namespaceMapping:
+    services: forgejo-restore
+EOF
+
+kubectl -n velero get restores.velero.io
+kubectl -n velero get podvolumerestores.velero.io   # one per volume, this is the data
+```
+
+Forgejo is the app this works cleanly for, and that is deliberate: its PVC is the
+one it was missing, because the chart creates it and left it unlabelled, so the
+forge *and* its repositories came back from a selector that would otherwise have
+brought back Forgejo without them. `persistence.labels` in the HelmRelease fixes
+that. Keycloak needs no selector - it is the whole of namespace `auth`, hand-made
+secret included - so `includedNamespaces: [auth]` is the complete form.
+
+`existingResourcePolicy` defaults to keeping whatever is already there. Restoring
+*over* a live namespace therefore does nothing to existing PVCs; set
+`existingResourcePolicy: Update` when the intent is to overwrite.
+
+**A volume is skipped when its pod is not running at backup time**, and Velero
+records that as a skip rather than a failure. That is not visible in the Backup
+status - `volumeInfo` only exists in the object store - so it takes the CLI to
+see it:
+
+```bash
+velero backup describe <name> --details     # look for SKIPPED in the volume list
+```
+
+It has bitten once: `gitea-shared-storage` was skipped because Forgejo was
+mid-rollout when the backup ran, and the backup still reported `Completed`. Treat a
+cleanup/rollout that lands across 02:13 as worth re-running the backup for.
+
 ### Failure drill: 2 of 3 nodes unavailable
 
 1. **Pre-check** - `kubectl get nodes`, `flux get kustomizations --status-selector
    ready=false`, `kubectl -n storage get volumes.longhorn.io` and note the
    healthy/degraded counts, and confirm one stateless and one stateful app are both
    healthy.
-2. **Restore point** - there is no backup layer, so the restore point is the
-   Longhorn replica set plus a git revision. Record `git rev-parse HEAD` and the
-   volume state before draining.
+2. **Restore point** - record `git rev-parse HEAD`, note the Longhorn volume state,
+   and confirm the last backup is a good one: `kubectl -n velero get backups.velero.io`.
+   A drain moves pods, so a schedule that fires mid-drill can skip volumes; that is
+   a reason to know the last good backup before starting, not to take a new one.
 3. **Simulate** - `kubectl cordon <node-a> <node-b>` then
    `kubectl drain <node-a> <node-b> --ignore-daemonsets --delete-emptydir-data --force`,
    then power off or disconnect both nodes. Expect degraded performance and some

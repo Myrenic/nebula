@@ -46,10 +46,16 @@ spec:
           # rule this replaces referenced one and could therefore never fire), and
           # each schedule here has a different period, so the expected age is
           # written out where it can be read.
+          #
+          # The match is a suffix on purpose. The chart prefixes every schedule
+          # with the release name, so the objects and the `schedule` label read
+          # `velero-apps-daily`, not `apps-daily` - an exact match on the name as
+          # written in the HelmRelease silently matches nothing, which is the
+          # failure mode this file exists to avoid.
           expr: |-
-            (time() - velero_backup_last_successful_timestamp{schedule="apps-daily"} > 30 * 3600)
+            (time() - velero_backup_last_successful_timestamp{schedule=~".*apps-daily"} > 30 * 3600)
             or
-            (time() - velero_backup_last_successful_timestamp{schedule="apps-monthly"} > 35 * 24 * 3600)
+            (time() - velero_backup_last_successful_timestamp{schedule=~".*apps-monthly"} > 35 * 24 * 3600)
           for: 1h
           labels:
             severity: critical
@@ -59,31 +65,69 @@ spec:
               Schedule {{ $labels.schedule }} has not completed a successful
               backup within its expected window (30h for daily, 35d for monthly).
         - alert: VeleroBackupFailing
+          # Scoped to this layer's two schedules on purpose. Backups made by hand
+          # carry `schedule=""`, and `last_status` for that series sticks at the
+          # verdict of the last ad-hoc backup forever - so an unlabelled version of
+          # this rule pins itself to whatever the last manual test did and reports
+          # a permanent failure from one bad afternoon, regardless of whether the
+          # schedules themselves are healthy.
           expr: |-
-            velero_backup_last_status == 0
+            velero_backup_last_status{schedule=~".*apps-(daily|monthly)"} == 0
             or
-            increase(velero_backup_failure_total[6h]) > 0
+            increase(velero_backup_failure_total{schedule=~".*apps-(daily|monthly)"}[6h]) > 0
             or
-            increase(velero_backup_partial_failure_total[6h]) > 0
-            or
-            increase(velero_backup_validation_failure_total[6h]) > 0
+            increase(velero_backup_validation_failure_total{schedule=~".*apps-(daily|monthly)"}[6h]) > 0
           for: 15m
           labels:
             severity: critical
           annotations:
             summary: Velero backup reported failures
             description: >-
-              Schedule {{ $labels.schedule }} has recorded a failed, partial or
+              Schedule {{ $labels.schedule }} has recorded a failed or
               unvalidated backup in the last 6 hours.
+        - alert: VeleroBackupPartiallyFailed
+          # Deliberately warning, not critical, and deliberately separate from the
+          # rule above. Velero counts an item that fails while the rest of the
+          # backup succeeds as a partial failure, and the item that does this here
+          # is an ephemeral pod being deleted mid-run: a `bouwstraat-build-*` pod
+          # that vanished under the enumerator failed the whole run's status while
+          # every PVC was captured intact. A pod that has already gone by the time
+          # its volume is read is a warning, not a data-loss event - but it is
+          # still worth seeing, because it is also what a PVC would look like if
+          # its pod were repeatedly absent. Confirm with
+          # `velero backup describe <name> --details`, which lists the failed items
+          # and the skipped volumes separately.
+          expr: increase(velero_backup_partial_failure_total{schedule=~".*apps-(daily|monthly)"}[6h]) > 0
+          for: 15m
+          labels:
+            severity: warning
+          annotations:
+            summary: Velero backup partially failed
+            description: >-
+              Schedule {{ $labels.schedule }} recorded a partial failure in the
+              last 6 hours. Usually an ephemeral pod deleted while its volume was
+              being read; check the failed items before assuming the data is
+              there.
         - alert: VeleroBackupNeverSucceeded
           # A schedule that has been enabled long enough to have run but has no
           # success timestamp at all. Sits under VeleroBackupStale for a broken
-          # fresh install, where there is no last-success to be stale.
+          # fresh install, where there is no last-success to be stale. Suffix
+          # match for the same reason as VeleroBackupStale: the label carries the
+          # chart's release prefix.
+          #
+          # The 26h is on the `for` clause, not on the selector. `increase()` over
+          # a long window extrapolates from the samples it has, so a schedule
+          # installed an hour ago that has already tried once and not yet
+          # succeeded satisfies `increase(...[26h]) > 0` immediately - the window
+          # buys nothing, and a 15m `for` would page all through the first night
+          # for a layer that is working as intended. Requiring the condition to
+          # hold continuously for one full period plus slack is what makes this
+          # "it has had its chance" rather than "it has not had its turn yet".
           expr: |-
-            increase(velero_backup_attempt_total{schedule="apps-daily"}[6h]) > 0
+            increase(velero_backup_attempt_total{schedule=~".*apps-daily"}[6h]) > 0
             unless on (schedule)
-            velero_backup_last_successful_timestamp{schedule="apps-daily"} > 0
-          for: 15m
+            velero_backup_last_successful_timestamp{schedule=~".*apps-daily"} > 0
+          for: 26h
           labels:
             severity: critical
           annotations:
