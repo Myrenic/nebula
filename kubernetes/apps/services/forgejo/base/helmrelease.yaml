@@ -40,12 +40,19 @@ spec:
       # (gitea admin auth add-oauth). The client is a hand-made object in realm
       # mytops - see the note in the README - with exactly one redirect URI:
       # https://code.<domain>/user/oauth2/keycloak/callback
+      #
+      # The scopes are not optional: add-oauth defaults the source to "openid"
+      # alone, and without email and profile the userinfo response carries
+      # neither an address nor a nickname, which leaves Forgejo unable to create
+      # the account on a first sign-in. (Checked against the authorize URL:
+      # scope=openid email profile.)
       oauth:
         - name: keycloak
           provider: openidConnect
           key: forgejo
           secret: "${FORGEJO_OAUTH_CLIENT_SECRET}"
           autoDiscoverUrl: "https://keycloak.${SECRET_DOMAIN_0}/realms/mytops/.well-known/openid-configuration"
+          scopes: "openid,email,profile"
       config:
         APP_NAME: "code.${SECRET_DOMAIN_0}"
         RUN_MODE: prod
