@@ -103,6 +103,21 @@ spec:
                       EXCLUDED_VOLUMES="${EXCLUDED_VOLUMES} ${vn}"
                     done
                   done
+
+                  # Every volume in the `kubevirt` namespace is a mytops VM root
+                  # disk: a copy of an artifact the catalog already pins by
+                  # digest, rebuilt from that artifact whenever a workspace is
+                  # recreated. Raising one to two replicas costs a full multi-GB
+                  # rebuild over the network - and because this job runs every
+                  # five minutes while an import takes about three, that rebuild
+                  # lands squarely on the guest's boot. One replica is the right
+                  # answer for a disk that is reproducible by construction.
+                  # The user's data lives on the RWX home volumes in `services`,
+                  # which this deliberately does not touch.
+                  for vn in $(kubectl get pvc -n kubevirt \
+                      -o jsonpath='{range .items[*]}{.spec.volumeName}{" "}{end}' 2>/dev/null); do
+                    EXCLUDED_VOLUMES="${EXCLUDED_VOLUMES} ${vn}"
+                  done
                   echo "Staying at 1 replica:${EXCLUDED_VOLUMES}"
 
                   # Converge EXISTING volumes to the target replica count, so
