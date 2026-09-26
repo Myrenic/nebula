@@ -183,7 +183,7 @@ spec:
           velero.io/plugin-config: ""
           velero.io/pod-volume-restore: RestoreItemAction
         data:
-          image: docker.io/velero/velero:v1.18.2
+          image: docker.io/velero/velero:v1.18.3
           secCtxRunAsUser: "1000"
 
     schedules:
