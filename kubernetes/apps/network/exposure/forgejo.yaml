@@ -7,7 +7,8 @@ metadata:
     # Public by design, like the status page: a forge has to answer a git client
     # that has no session, so oauth2-proxy cannot sit in front of it - a 401
     # would be answered with a redirect to Keycloak that `git fetch` cannot
-    # follow. Forgejo has its own accounts, and registration is closed.
+    # follow. Forgejo authenticates against that same realm itself, as an OIDC
+    # client, so the browser flow still lands in Keycloak.
     testlab.io/exposure: public
 spec:
   entryPoints:

@@ -9,15 +9,15 @@
 {{template "base/head" .}}
 <div class="nebula-page">
   <section class="nebula-hero">
-    <h1>Source code,<br>self-hosted</h1>
-    <p>Git repositories, pull requests, issues and code review, on hardware we run ourselves.</p>
+    <h1>Code, versioned<br>at home</h1>
+    <p>Git repositories, pull requests, issues and reviews for everything built here, on three nodes in the house and behind the same account that opens the rest of it.</p>
     <div class="nebula-ctas">
-      <a class="nebula-btn" href="{{AppSubUrl}}/explore/repos">Explore repositories</a>
       {{if .IsSigned}}
-        <a class="nebula-btn nebula-btn-plain" href="{{AppSubUrl}}/dashboard">Your dashboard</a>
+        <a class="nebula-btn" href="{{AppSubUrl}}/dashboard">Your dashboard</a>
       {{else}}
-        <a class="nebula-btn nebula-btn-plain" href="{{AppSubUrl}}/user/login">Sign in</a>
+        <a class="nebula-btn" href="{{AppSubUrl}}/user/oauth2/keycloak">Sign in with Keycloak</a>
       {{end}}
+      <a class="nebula-btn nebula-btn-plain" href="{{AppSubUrl}}/explore/repos">Browse repositories</a>
     </div>
   </section>
   <div class="nebula-cards">
@@ -40,6 +40,18 @@
       <div class="nebula-icon">
         <svg width="40" height="40" viewBox="0 0 40 40" fill="none" aria-hidden="true">
           <g stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M20 7l11 4v9c0 6.6-4.6 11-11 13-6.4-2-11-6.4-11-13v-9l11-4z"/>
+            <path d="M15.5 19.5l3.5 3.5 6-6.5"/>
+          </g>
+        </svg>
+      </div>
+      <h3>One account</h3>
+      <p>Keycloak signs you in: the realm account that opens Grafana and the Traefik dashboard works here too, and your first sign-in creates the account.</p>
+    </div>
+    <div class="nebula-card">
+      <div class="nebula-icon">
+        <svg width="40" height="40" viewBox="0 0 40 40" fill="none" aria-hidden="true">
+          <g stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
             <rect x="8" y="9" width="24" height="9" rx="2"/>
             <rect x="8" y="22" width="24" height="9" rx="2"/>
             <path d="M13 13.5h.01"/>
@@ -47,20 +59,8 @@
           </g>
         </svg>
       </div>
-      <h3>Self-hosted</h3>
-      <p>Forgejo runs on the same three-node cluster as everything else here, and the repositories live on storage we control.</p>
-    </div>
-    <div class="nebula-card">
-      <div class="nebula-icon">
-        <svg width="40" height="40" viewBox="0 0 40 40" fill="none" aria-hidden="true">
-          <g stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M20 7l11 4v9c0 6.6-4.6 11-11 13-6.4-2-11-6.4-11-13v-9l11-4z"/>
-            <path d="M15.5 19.5l3.5 3.5 6-6.5"/>
-          </g>
-        </svg>
-      </div>
-      <h3>Accounts by hand</h3>
-      <p>Registration is closed. The admin creates every account, and repositories marked public stay readable to anyone.</p>
+      <h3>Our own hardware</h3>
+      <p>Forgejo 15 and PostgreSQL on three Talos nodes, with the repositories on Longhorn volumes in the cluster that runs everything else here.</p>
     </div>
     <div class="nebula-card">
       <div class="nebula-icon">
@@ -72,7 +72,7 @@
         </svg>
       </div>
       <h3>Open source</h3>
-      <p>Forgejo is AGPL-licensed, community-run git hosting: no feature gates, no telemetry, no vendor.</p>
+      <p>Forgejo is AGPL-licensed and community-run: no feature gates, no telemetry, and no vendor holding the keys to the repositories.</p>
     </div>
   </div>
 </div>

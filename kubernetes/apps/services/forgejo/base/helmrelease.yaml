@@ -21,16 +21,31 @@ spec:
     # one move that upgrades the application, and a pinned tag here would fight
     # it.
     gitea:
+      # Keycloak is the account source. The address below is what makes the two
+      # accounts one: on the first Keycloak sign-in Forgejo tries to create a user
+      # with the address the provider returned, that name is taken, and
+      # ACCOUNT_LINKING=auto links the Keycloak identity to this admin account
+      # instead of duplicating it. Set it to the realm user's address and not to
+      # some other mailbox, or the login lands in a second, non-admin account.
       admin:
         username: "${FORGEJO_ADMIN_USERNAME}"
         password: "${FORGEJO_ADMIN_PASSWORD}"
-        # No mailer is configured, so this is an account identifier rather than
-        # somewhere Forgejo writes to; it is the owner's address so that adding a
-        # mailer later does not start bouncing password resets into the void.
-        email: "${SECRET_ACME_EMAIL}"
+        email: "${FORGEJO_ADMIN_EMAIL}"
         # The declared password wins: every pod start re-applies it, so changing
         # it in the web UI is undone at the next restart. Change it here instead.
+        # It is the break-glass credential; day to day the account is used through
+        # Keycloak.
         passwordMode: keepUpdated
+      # The login source, created from these values by the chart's init container
+      # (gitea admin auth add-oauth). The client is a hand-made object in realm
+      # mytops - see the note in the README - with exactly one redirect URI:
+      # https://code.<domain>/user/oauth2/keycloak/callback
+      oauth:
+        - name: keycloak
+          provider: openidConnect
+          key: forgejo
+          secret: "${FORGEJO_OAUTH_CLIENT_SECRET}"
+          autoDiscoverUrl: "https://keycloak.${SECRET_DOMAIN_0}/realms/mytops/.well-known/openid-configuration"
       config:
         APP_NAME: "code.${SECRET_DOMAIN_0}"
         RUN_MODE: prod
@@ -45,10 +60,20 @@ spec:
           PASSWD: "${FORGEJO_DB_PASSWORD}"
           SSL_MODE: disable
         service:
-          # The host is on the public DNS like every other one here, and a forge
-          # with open registration is a spam target. Accounts come from the admin
-          # user above or from Site administration.
+          # The host is on the public DNS like every other one here, and the local
+          # sign-up form is what spam finds. Accounts are made by Keycloak (below)
+          # or by hand in Site administration, never by a form.
           DISABLE_REGISTRATION: true
+        # How the Keycloak source above is allowed to make accounts. Together these
+        # two give the model the rest of the cluster already has (oauth2-proxy's
+        # email-domain is *): anyone in realm mytops gets an account on first
+        # sign-in, and a login whose address belongs to an existing account links
+        # to it - which is what keeps the admin account the admin account. Set
+        # ENABLE_AUTO_REGISTRATION to false and every new person needs an account
+        # created for them first, with an address that matches the realm.
+        oauth2_client:
+          ENABLE_AUTO_REGISTRATION: true
+          ACCOUNT_LINKING: auto
         session:
           # Default is memory, which would sign everyone out on every restart -
           # and this pod restarts whenever the chart or the theme changes.

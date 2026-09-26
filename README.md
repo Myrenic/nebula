@@ -14,7 +14,7 @@ storage. Those limits are written down here instead of being discovered later.
 | --- | --- | --- |
 | CNI | Cilium 1.20, installed once by the Omni template, manages itself after | `omni/cilium/` |
 | Ingress | Traefik v3 (2 replicas), the only LoadBalancer service, `10.0.50.4` | `kubernetes/apps/network/` |
-| Identity | oauth2-proxy in front of Keycloak (realm `mytops`), OIDC | `kubernetes/apps/auth/` |
+| Identity | oauth2-proxy in front of Keycloak (realm `mytops`), OIDC; the forge signs in against the same realm directly | `kubernetes/apps/auth/` |
 | Certificates | cert-manager with a Cloudflare DNS-01 ClusterIssuer, wildcard cert | `kubernetes/apps/cert-manager/` |
 | Storage | Longhorn 1.11, one replica by default, `longhorn-2-replicas` on request | `kubernetes/apps/storage/` |
 | Virtualization | KubeVirt + CDI, one VM workspace today | `kubernetes/apps/kubevirt/` |
@@ -141,10 +141,15 @@ Notes:
 - `kubernetes/apps/flux-system/flux-instance/flux-system-secret.sops.yaml` is kept
   only as an encrypted backup of the old deploy key and is not part of any
   kustomization.
-- Two credentials are created by hand and are in no manifest: the oauth2-proxy
-  client secret (`keycloak-webui-oauth` in `auth`) and the age key above. Both are
-  documented in `kubernetes/apps/auth/README.md`. A rebuild from git alone therefore
-  needs those two steps, which is the honest state of things.
+- Three things are created by hand and are in no manifest: the oauth2-proxy
+  client secret (`keycloak-webui-oauth` in `auth`), the `forgejo` client in
+  Keycloak realm `mytops`, and the age key above. The first is documented in
+  `kubernetes/apps/auth/README.md`; the second is a confidential OIDC client whose
+  only redirect URI is `https://code.<domain>/user/oauth2/keycloak/callback` and
+  whose secret *is* in git, encrypted, as `FORGEJO_OAUTH_CLIENT_SECRET` - the
+  client object itself has to be made with the Keycloak admin API, because nothing
+  in this repository manages Keycloak's configuration. A rebuild from git alone
+  therefore needs those three steps, which is the honest state of things.
 
 ## Adding an app
 
