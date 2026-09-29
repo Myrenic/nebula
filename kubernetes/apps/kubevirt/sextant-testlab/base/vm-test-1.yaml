@@ -1,0 +1,71 @@
+# A test device for the fleet: the same NixOS configuration the overlay
+# generates for `vm-test-1`, booted in the cluster instead of on a laptop.
+#
+# The disk is imported by CDI from the store next door, so the guest runs the
+# image the fleet's generator produced - the image a real install would have put
+# on the machine - and not a generic cloud image with a hand-installed agent.
+#
+# Its identity (the per-device credential) is not here and never in git: it
+# arrives through cloud-init from the `vm-test-1-userdata` Secret, minted by the
+# console when the device was enrolled. See the README next to this directory.
+apiVersion: kubevirt.io/v1
+kind: VirtualMachine
+metadata:
+  name: vm-test-1
+spec:
+  runStrategy: Always
+  dataVolumeTemplates:
+    - metadata:
+        name: vm-test-1-root
+      spec:
+        source:
+          http:
+            # Written by build-in-cluster.yaml (manual, not applied by Flux).
+            url: http://sextant-testlab-images.kubevirt.svc.cluster.local/vm-test-1.qcow2
+        pvc:
+          accessModes:
+            - ReadWriteOnce
+          storageClassName: longhorn
+          resources:
+            requests:
+              # The image itself is ~2 GiB; the rest is headroom for what a
+              # device writes while it runs.
+              storage: 12Gi
+  template:
+    metadata:
+      labels:
+        kubevirt.io/domain: vm-test-1
+    spec:
+      domain:
+        cpu:
+          cores: 2
+        memory:
+          guest: 2Gi
+        resources:
+          requests:
+            cpu: 200m
+            memory: 1Gi
+          limits:
+            memory: 2Gi
+        devices:
+          disks:
+            - name: root
+              disk:
+                bus: virtio
+            - name: cloudinit
+              disk:
+                bus: virtio
+          interfaces:
+            - name: default
+              masquerade: {}
+      networks:
+        - name: default
+          pod: {}
+      volumes:
+        - name: root
+          dataVolume:
+            name: vm-test-1-root
+        - name: cloudinit
+          cloudInitNoCloud:
+            secretRef:
+              name: vm-test-1-userdata

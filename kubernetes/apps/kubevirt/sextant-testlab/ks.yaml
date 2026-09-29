@@ -1,0 +1,29 @@
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: sextant-testlab
+  namespace: flux-system
+spec:
+  targetNamespace: kubevirt
+  interval: 1h
+  retryInterval: 1m
+  timeout: 5m
+  prune: true
+  path: ./kubernetes/apps/kubevirt/sextant-testlab/base
+  sourceRef:
+    kind: GitRepository
+    name: flux-system
+    namespace: flux-system
+  postBuild:
+    substituteFrom:
+      - kind: Secret
+        name: cluster-secrets
+  dependsOn:
+    - name: longhorn
+    - name: kubevirt-cr
+    - name: cdi-cr
+  # The VMs are the point of the directory and they are ready when the guest is
+  # up, which Flux cannot see - KubeVirt reports a Running VMI long before the
+  # device has checked in, and a guest that never boots is a fact for the
+  # console, not for a Kustomization's health check.
+  wait: false
