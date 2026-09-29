@@ -89,8 +89,8 @@ The disks currently in the store, as `build-in-cluster.yaml` wrote them:
 
 | Disk | Bytes | Built from |
 | --- | --- | --- |
-| `vm-test-1.qcow2` | 2 469 724 160 | overlay `b5179e2`, sha256 `c36aa8f8…308f4` |
-| `vm-test-2.qcow2` | 2 469 658 624 | overlay `b5179e2`, sha256 `c667deb4…b6e9d` |
+| `vm-test-1.qcow2` | 3 747 741 696 | overlay `53aa2f8`, sha256 `c72d259e…66648a` |
+| `vm-test-2.qcow2` | 3 747 479 552 | overlay `53aa2f8`, sha256 `664da137…a84a9fc` |
 
 Each VM's disk is a `DataVolume` of its own (`datavolumes.yaml`), pinned to the
 sha256 above, so an import that would boot something else fails instead.
@@ -107,15 +107,34 @@ the VM stops while its volume is gone.
 ### 5. Check in
 
 The console's device page is the answer: `vm-test-1` should move from provisional
-to active and start reporting facts, its deployed revision and its posture. From
-the machine side:
+to active and start reporting facts, its deployed revision and its posture.
 
 ```sh
 kubectl -n kubevirt get vmi vm-test-1 -o jsonpath='{.status.phase}{"\n"}'
-kubectl -n kubevirt exec -it vm-test-1 -- journalctl -u sextant-agent -n 20
 ```
 
-`kubectl exec` into a VM needs the KubeVirt guest agent (the image enables it).
+There is no shell here: `kubectl exec` addresses pods, and a VMI is not one - the
+way into a guest is `virtctl console -n kubevirt vm-test-1` (serial, no login
+unless the user-data adds one) or `virtctl ssh`, which needs a key in the guest.
+For a device's own view of itself, use the console: a `diagnostics` intent on the
+device page collects a bounded bundle (journal tail, failed units) from the guest
+and stores it, sealed, in the observed plane.
+
+### 6. Watch it converge
+
+These devices converge like real ones. `converge.nix` in the overlay points comin
+at the fleet's repository, so a commit to `main` (or to the device's ring branch)
+is picked up on the next poll and rebuilt in place:
+
+```sh
+# read the overlay's current revision, then push something and watch this change
+kubectl -n kubevirt get vmi vm-test-1 -o jsonpath='{.status.phase}{"\n"}'
+```
+
+The agent reports the revision it was built from, so the console's device page is
+the fastest place to see convergence land. The token comin authenticates with is
+written by the same user-data as the device credential, from
+`vm-test-1-userdata` - see `converge.nix` in the overlay for the path it reads.
 
 ## What this path does not do
 
