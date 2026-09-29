@@ -8,10 +8,16 @@ data:
   # build: kubelet refreshes the mount and Glance watches the file, so editing
   # this and pushing is a reload, not a rollout.
   #
-  # ${...} here is Flux's build-time substitution (postBuild on the Kustomization
-  # reads cluster-secrets), not Glance's own ${ENV_VAR} syntax - so no hostname
-  # and no home town is in this public repository. Glance's syntax stays available
-  # for anything that must not even reach the rendered ConfigMap.
+  # Every placeholder below is Flux's build-time substitution (postBuild on the
+  # Kustomization reads cluster-secrets), not Glance's own environment-variable
+  # syntax - so no hostname and no home town is in this public repository. Glance's
+  # own variable syntax stays available for anything that must not even reach the
+  # rendered ConfigMap.
+  #
+  # Write those placeholders in full or not at all: the substitution is textual
+  # and runs over the whole object, so a bare brace pair inside a comment is a
+  # parse error ("unable to parse variable name") and fails the Kustomization.
+  # This paragraph shipped that way once; it says it in words now.
   glance.yml: |
     # The cluster's front page: what nebula exposes, what this repository is
     # doing, and the two feeds worth reading. Nothing here is a secret and there
@@ -252,7 +258,7 @@ data:
               # the HTML login page back with a 200, which is how this looked
               # like it worked at first - so the template signs in, takes the
               # cookie off the login response, and asks with it. Credentials come
-              # from cluster-secrets; the ConfigMap holds ${...}, never values.
+              # from cluster-secrets; the ConfigMap holds placeholders, never values.
               #
               # A 7-day window, not 24h: analytics only count real requests, so a
               # quiet day would empty the list and read as broken rather than
