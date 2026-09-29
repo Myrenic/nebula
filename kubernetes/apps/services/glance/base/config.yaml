@@ -8,14 +8,16 @@ data:
   # build: kubelet refreshes the mount and Glance watches the file, so editing
   # this and pushing is a reload, not a rollout.
   #
-  # ${SECRET_DOMAIN_0} is substituted by Flux at build time (postBuild on the
-  # Kustomization), which is why no hostname here is literal. Glance's own
-  # ${ENV_VAR} syntax stays available for anything that must not be in git.
+  # ${...} here is Flux's build-time substitution (postBuild on the Kustomization
+  # reads cluster-secrets), not Glance's own ${ENV_VAR} syntax - so no hostname
+  # and no home town is in this public repository. Glance's syntax stays available
+  # for anything that must not even reach the rendered ConfigMap.
   glance.yml: |
-    # The cluster's front page: what nebula exposes, and what this repository is
-    # doing. Nothing here is a secret and there is no `auth` block - the route
-    # that reaches Glance (kubernetes/apps/network/exposure/glance.yaml) is
-    # behind oauth2-proxy, which is the whole gate.
+    # The cluster's front page: what nebula exposes, what this repository is
+    # doing, and the two feeds worth reading. Nothing here is a secret and there
+    # is no `auth` block - the route that reaches Glance
+    # (kubernetes/apps/network/exposure/glance.yaml) is behind oauth2-proxy,
+    # which is the whole gate.
     server:
       # Traefik terminates TLS and oauth2-proxy forwards the request on, so the
       # X-Forwarded-* headers are the only place the real client address lives.
@@ -23,6 +25,16 @@ data:
 
     branding:
       app-name: nebula
+
+    # Neon Pink, copied from upstream's theme gallery (docs/themes.md). It is the
+    # default here; the picker stays enabled, so a browser can still switch back
+    # to the stock dark theme without a change in git.
+    theme:
+      background-color: 240 27 11
+      contrast-multiplier: 1.5
+      primary-color: 321 100 71
+      positive-color: 165 78 51
+      negative-color: 360 100 71
 
     pages:
       - name: Home
@@ -32,15 +44,27 @@ data:
               - type: clock
                 hour-format: 24h
 
-              # Europe/Amsterdam is the cluster's own TZ (cluster-secrets), which
-              # is the only location hint this repository has. Open-Meteo needs
-              # no key, and it needs the country spelled out - "Amsterdam,
+              # The location lives in cluster-secrets as WEATHER_LOCATION, because
+              # this repository is public and a city is a home address. Open-Meteo
+              # needs no key; it does need the country spelled out ("Groningen,
               # Netherlands" geocodes to nothing, "The Netherlands" to the right
-              # one; the province pins it against the American Amsterdams.
+              # one) and the province pinned, which is what the three-part form in
+              # the secret does.
               - type: weather
-                location: Amsterdam, North Holland, The Netherlands
+                location: ${WEATHER_LOCATION}
                 units: metric
                 hour-format: 24h
+
+              # The repository the cluster converges from, live. Renovate runs on
+              # it, so the pull requests are the updates that are waiting and the
+              # commits are the ones that landed - which is the whole point of
+              # having it here. No token: 60 unauthenticated GitHub requests per
+              # hour, against a widget whose own default cache is 1h.
+              - type: repository
+                repository: Myrenic/nebula
+                pull-requests-limit: 5
+                issues-limit: 1
+                commits-limit: 3
 
           - size: full
             widgets:
@@ -111,9 +135,22 @@ data:
 
           - size: small
             widgets:
-              # The repository the cluster converges from, live: the open Renovate
-              # and hand-written PRs, and the commits that have landed. No token,
-              # which is 60 unauthenticated GitHub requests per hour - against a
-              # widget whose own default cache is 1h.
-              - type: repository
-                repository: Myrenic/nebula
+              # Tweakers' news feed. feeds.tweakers.net does not resolve; the
+              # working URL is the one their own RSS page links to.
+              - type: rss
+                title: Tweakers
+                limit: 10
+                collapse-after: 5
+                feeds:
+                  - url: https://tweakers.net/feeds/nieuws.xml
+
+              # The subreddit this cluster's software comes from. vertical-cards
+              # is the style written for a small column (the list styles are for
+              # full ones), and it is why there is no collapse-after here - that
+              # option does not exist for the card styles.
+              - type: reddit
+                title: r/selfhosted
+                subreddit: selfhosted
+                style: vertical-cards
+                limit: 10
+                sort-by: hot
