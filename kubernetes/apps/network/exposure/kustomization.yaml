@@ -24,7 +24,6 @@ resources:
   - ./mushroom-finder.yaml
   - ./mytops.yaml
   - ./oauth2-proxy.yaml
-  - ./obsidiansync.yaml
   - ./open-webui.yaml
   - ./searxng.yaml
   - ./spottarr.yaml

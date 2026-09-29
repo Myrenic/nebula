@@ -23,7 +23,7 @@ later.
 | Observability | kube-prometheus-stack, Loki, Promtail, blackbox probes per discovered host, Telegram alerts | `kubernetes/apps/monitoring/` |
 | Workspaces | `mytops`: browser desktops and VMs, its own repository | `kubernetes/apps/services/mytops/` |
 | Other apps | aiostreams, forgejo, frigate (+ reolinkproxy), glance, open-webui, searxng, spottarr, stalker-stremio, uptime-kuma | `kubernetes/apps/services/` |
-| Outside the cluster | homeassistant, obsidiansync - reachable through a Service + Endpoints pair that points at another machine | `kubernetes/apps/network/exposure/` |
+| Outside the cluster | homeassistant - reachable through a Service + Endpoints pair that points at another machine | `kubernetes/apps/network/exposure/` |
 
 Two applications keep their code and manifests in their own repositories, because
 their CI builds artefacts that a GitOps repo should not contain:

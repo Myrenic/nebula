@@ -108,14 +108,6 @@ data:
                     url: https://mushrooms.${SECRET_DOMAIN_0}
                   - title: Lucian
                     url: https://lucian.${SECRET_DOMAIN_0}
-                  # Not a cluster workload: a Service + Endpoints pair onto the
-                  # machine that runs Obsidian's CouchDB. It is listed because it
-                  # is exposed, and it is the one entry here that was already
-                  # failing when this dashboard was added - 10.0.3.46 answers
-                  # nothing on 5984, and Traefik turns that into a 502.
-                  - title: Obsidian sync
-                    url: https://obsidian.${SECRET_DOMAIN_0}
-                    icon: di:couchdb
 
           - size: small
             widgets:
