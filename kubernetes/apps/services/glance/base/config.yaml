@@ -39,6 +39,7 @@ data:
     pages:
       - name: Home
         columns:
+          # Left, narrow: the time, the weather, and what the repository is doing.
           - size: small
             widgets:
               - type: clock
@@ -66,7 +67,36 @@ data:
                 issues-limit: 1
                 commits-limit: 3
 
+          # Middle, wide: the two feeds. They are the only widgets here that
+          # want the width, which is why the column carries it.
           - size: full
+            widgets:
+              # Tweakers' news feed. feeds.tweakers.net does not resolve; the
+              # working URL is the one their own RSS page links to.
+              - type: rss
+                title: Tweakers
+                limit: 10
+                collapse-after: 5
+                feeds:
+                  - url: https://tweakers.net/feeds/nieuws.xml
+
+              # The subreddit this cluster's software comes from. vertical-list is
+              # the style written for a full column (vertical-cards is the one for
+              # a small column), and it is the only style that takes
+              # show-thumbnails and collapse-after.
+              - type: reddit
+                title: r/selfhosted
+                subreddit: selfhosted
+                style: vertical-list
+                show-thumbnails: true
+                limit: 10
+                collapse-after: 5
+                sort-by: hot
+
+          # Right, narrow: the cluster itself. One host per row, because a narrow
+          # column cannot lay the list out in two - the names are short and the
+          # numbers are what matters.
+          - size: small
             widgets:
               # One entry per exposed host, checked over the URL a browser uses -
               # so DNS, the wildcard certificate and the route are covered along
@@ -132,25 +162,3 @@ data:
                     url: https://mushrooms.${SECRET_DOMAIN_0}
                   - title: Lucian
                     url: https://lucian.${SECRET_DOMAIN_0}
-
-          - size: small
-            widgets:
-              # Tweakers' news feed. feeds.tweakers.net does not resolve; the
-              # working URL is the one their own RSS page links to.
-              - type: rss
-                title: Tweakers
-                limit: 10
-                collapse-after: 5
-                feeds:
-                  - url: https://tweakers.net/feeds/nieuws.xml
-
-              # The subreddit this cluster's software comes from. vertical-cards
-              # is the style written for a small column (the list styles are for
-              # full ones), and it is why there is no collapse-after here - that
-              # option does not exist for the card styles.
-              - type: reddit
-                title: r/selfhosted
-                subreddit: selfhosted
-                style: vertical-cards
-                limit: 10
-                sort-by: hot
