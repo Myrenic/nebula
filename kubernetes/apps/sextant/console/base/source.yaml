@@ -1,0 +1,23 @@
+# The chart is released in the project's own git repository: the release workflow
+# pushes images and leaves deploy/helm in the tag, so one tag is the chart and
+# the images together at one version (the deployment falls back to the chart's
+# appVersion for the image tag). Pinning the tag is therefore what pins both.
+#
+# ignore keeps the artifact to the chart: the repository is 6 MB of Go source,
+# handbook and console screenshots that helm-controller would otherwise carry
+# into the cluster on every reconcile. The pattern mirrors gitignore's rule that
+# a re-included path needs its parents re-included first.
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: GitRepository
+metadata:
+  name: sextant
+spec:
+  interval: 1h
+  url: https://codeberg.org/DAWO/DAWO-Sextant
+  ref:
+    tag: v0.91.0
+  ignore: |
+    /*
+    !/deploy
+    /deploy/*
+    !/deploy/helm

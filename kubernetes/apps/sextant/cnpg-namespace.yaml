@@ -1,0 +1,13 @@
+# The Postgres operator lives in its own namespace because that is what its chart
+# and every CloudNativePG guide assume, and because it watches the whole cluster
+# (config.clusterWide defaults to true). Running it inside `sextant` would put a
+# cluster-wide controller in the application namespace and pull it into the
+# Velero backup set for no reason.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: cnpg-system
+  annotations:
+    kustomize.toolkit.fluxcd.io/prune: disabled
+  labels:
+    pod-security.kubernetes.io/enforce: restricted

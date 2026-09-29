@@ -17,4 +17,5 @@ resources:
   # kubernetes/apps/mytops-control/kustomization.yaml.
   - mytops-control
   - auth
+  - sextant
   - monitoring

@@ -1,0 +1,112 @@
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: sextant
+spec:
+  interval: 1h
+  # Long enough for the gate-runner's first boot, which fetches nixpkgs before
+  # its startup probe passes.
+  timeout: 15m
+  chart:
+    spec:
+      chart: deploy/helm
+      # A git source carries no chart versions to compare, so Revision is the only
+      # strategy available: the artifact moves when the GitRepository's tag does.
+      reconcileStrategy: Revision
+      sourceRef:
+        kind: GitRepository
+        name: sextant
+  install:
+    remediation:
+      retries: 3
+  upgrade:
+    remediation:
+      retries: 3
+  values:
+    # Where the images come from. The tags are deliberately not set: they fall
+    # back to the chart's appVersion, so bumping the GitRepository tag above moves
+    # chart and images together instead of leaving a tag here to go stale.
+    #
+    # The registry is BB Open's own Forgejo and it serves these anonymously (the
+    # token endpoint the challenge points at hands an anonymous token the manifest
+    # endpoint accepts), so no imagePullSecret is involved.
+    image:
+      repository: forgejo.bb-open.com/bb-open/sextant
+    gateRunner:
+      enabled: true
+      image:
+        repository: forgejo.bb-open.com/bb-open/sextant-gate
+      # The runner evaluates whole NixOS configurations; this is the heaviest pod
+      # in the namespace and the one limit worth stating rather than inheriting.
+      resources:
+        requests:
+          cpu: 100m
+          memory: 512Mi
+        limits:
+          cpu: "2"
+          memory: 4Gi
+
+    # The observed plane's secrets: one existing Secret, substituted from
+    # cluster-secrets (secret.yaml next to this file). Nothing secret is a value.
+    secretName: sextant
+    # Every commit to the overlay is proved by a nix evaluation in the gate-runner
+    # before it lands. `eval` is not an option - the console image ships no nix -
+    # and `none` would commit unvalidated configuration to devices, which the
+    # chart refuses without allowUnvalidated.
+    gateMode: remote
+
+    # The overlay repository: the fleet's configuration is data in git, and this
+    # is the repository the console commits to and the devices follow.
+    gitRemote:
+      url: https://code.tuntelder.com/myrenic/sextant-overlay.git
+      branch: main
+      netrcSecret: sextant-overlay-netrc
+
+    # Keycloak, realm mytops: the same realm oauth2-proxy and the forge use, so a
+    # console account is the account that already opens everything else here.
+    oidc:
+      issuer: https://keycloak.${SECRET_DOMAIN_0}/realms/mytops
+      clientId: sextant
+      groupsClaim: groups
+    # Keycloak's groups claim carries full paths and the console compares the
+    # claim to these strings exactly, leading slash included. Owner is the only
+    # role that can change the fleet or write to the overlay; editors and viewers
+    # are added here (and as groups in the realm) when there is a reason for them.
+    ownerGroups: /sextant-owners
+
+    # The chart's Ingress is off: the cluster's one way in is Traefik, and the
+    # route lives with every other reachable host in
+    # kubernetes/apps/network/exposure/sextant.yaml. host is still set because the
+    # chart builds the OIDC redirect URL from it.
+    ingress:
+      enabled: false
+      host: sextant.${SECRET_DOMAIN_0}
+    certManager:
+      enabled: false
+
+    # The overlay clone the console edits, and its push remote, on one volume.
+    persistence:
+      size: 1Gi
+      storageClass: longhorn
+
+    # CloudNativePG creates the database and the chart wires the DSN to it.
+    cnpg:
+      name: sextant-pg
+      instances: 1
+      storage: 8Gi
+      storageClass: longhorn
+      # Off, and it is a decision rather than an omission: the chart writes its
+      # backups to an S3-compatible object store, and the only off-site copy this
+      # cluster has is Velero to Azure Blob, which it cannot be pointed at. What is
+      # in here that nothing else can rebuild is the LUKS recovery-key escrow, so
+      # turning this on - with an object store to point it at - is the first thing
+      # to do before the fleet grows past a handful of machines.
+      backup:
+        enabled: false
+
+    # written against Cilium, which is what this cluster runs. It allows DNS, the
+    # Postgres cluster, the gate-runner and 443 out: the OIDC issuer and the
+    # overlay's forge both resolve to public addresses, so nothing here needs to
+    # reach an in-cluster address on another port.
+    networkPolicy:
+      engine: cilium

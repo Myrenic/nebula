@@ -1,0 +1,18 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: sextant
+  annotations:
+    # Removing this namespace from git must not take the observed plane with it:
+    # the LUKS recovery keys escrowed from devices are acknowledged on the device
+    # and erased there, so this namespace holds the only copy of the material
+    # that gets somebody back into an encrypted disk.
+    kustomize.toolkit.fluxcd.io/prune: disabled
+  labels:
+    # Verified rather than assumed: the console, its init container and the
+    # gate-runner all render runAsNonRoot, seccompProfile RuntimeDefault,
+    # allowPrivilegeEscalation false and capabilities drop ALL, and the
+    # CloudNativePG operator gives the Postgres pods it creates the same
+    # treatment (seccompProfile defaults to RuntimeDefault on every pod and
+    # container). Nothing here needs to be exempt from the strictest policy.
+    pod-security.kubernetes.io/enforce: restricted

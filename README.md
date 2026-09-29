@@ -16,12 +16,13 @@ later.
 | --- | --- | --- |
 | CNI | Cilium 1.20, installed once by the Omni template, manages itself after | `omni/cilium/` |
 | Ingress | Traefik v3 (2 replicas), the only LoadBalancer service, `10.0.50.4` | `kubernetes/apps/network/` |
-| Identity | oauth2-proxy in front of Keycloak (realm `mytops`), OIDC; the forge signs in against the same realm directly | `kubernetes/apps/auth/` |
+| Identity | oauth2-proxy in front of Keycloak (realm `mytops`), OIDC; the forge signs in against the same realm directly; Keycloak brokers Microsoft (Entra ID) sign-in | `kubernetes/apps/auth/` |
 | Certificates | cert-manager with a Cloudflare DNS-01 ClusterIssuer, wildcard cert | `kubernetes/apps/cert-manager/` |
 | Storage | Longhorn 1.11, one replica by default, `longhorn-2-replicas` on request | `kubernetes/apps/storage/` |
 | Virtualization | KubeVirt + CDI, one VM workspace today | `kubernetes/apps/kubevirt/` |
 | Observability | kube-prometheus-stack, Loki, Promtail, blackbox probes per discovered host, Telegram alerts | `kubernetes/apps/monitoring/` |
 | Workspaces | `mytops`: browser desktops and VMs, its own repository | `kubernetes/apps/services/mytops/` |
+| Fleet | Sextant, the control plane for managed NixOS devices, on its own CloudNativePG database; Keycloak is its identity provider, a git repository is the fleet's configuration | `kubernetes/apps/sextant/` |
 | Other apps | aiostreams, forgejo, frigate (+ reolinkproxy), glance, open-webui, searxng, spottarr, stalker-stremio, uptime-kuma | `kubernetes/apps/services/` |
 | Outside the cluster | homeassistant - reachable through a Service + Endpoints pair that points at another machine | `kubernetes/apps/network/exposure/` |
 
@@ -143,15 +144,20 @@ Notes:
 - `kubernetes/apps/flux-system/flux-instance/flux-system-secret.sops.yaml` is kept
   only as an encrypted backup of the old deploy key and is not part of any
   kustomization.
-- Three things are created by hand and are in no manifest: the oauth2-proxy
+- Four things are created by hand and are in no manifest: the oauth2-proxy
   client secret (`keycloak-webui-oauth` in `auth`), the `forgejo` client in
-  Keycloak realm `mytops`, and the age key above. The first is documented in
+  Keycloak realm `mytops`, the `sextant` client and its `sextant-owners` group in
+  that same realm, and the age key above. The first is documented in
   `kubernetes/apps/auth/README.md`; the second is a confidential OIDC client whose
   only redirect URI is `https://code.<domain>/user/oauth2/keycloak/callback` and
   whose secret *is* in git, encrypted, as `FORGEJO_OAUTH_CLIENT_SECRET` - the
   client object itself has to be made with the Keycloak admin API, because nothing
-  in this repository manages Keycloak's configuration. A rebuild from git alone
-  therefore needs those three steps, which is the honest state of things.
+  in this repository manages Keycloak's configuration. The third is the same
+  shape, with the commands written out in `kubernetes/apps/sextant/README.md`
+  together with the one thing that is neither in git nor in Keycloak: the overlay
+  repository the console pushes to and the token it pushes with, which live on the
+  cluster's own forge. A rebuild from git alone therefore needs those four steps,
+  which is the honest state of things.
 - One credential lives outside git *and* outside Keycloak: the read-only Proxmox
   token the dashboard's `proxmox` widget reads. On the Proxmox host (`pve`,
   `10.0.50.11`) there is a group `api-ro` (role `PVEAuditor` at `/`), a user

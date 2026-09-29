@@ -1,0 +1,20 @@
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: cloudnative-pg
+  namespace: flux-system
+spec:
+  targetNamespace: cnpg-system
+  interval: 1h
+  retryInterval: 1m
+  timeout: 5m
+  prune: true
+  path: ./kubernetes/apps/sextant/cloudnative-pg/base
+  sourceRef:
+    kind: GitRepository
+    name: flux-system
+    namespace: flux-system
+  # Ordering matters in one direction only: the console's Kustomization applies a
+  # postgresql.cnpg.io/v1 Cluster, and an unknown kind is an error until this
+  # operator's CRDs exist. The console dependsOn this, not the other way round.
+  wait: true
