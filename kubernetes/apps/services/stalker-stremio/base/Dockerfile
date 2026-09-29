@@ -1,7 +1,7 @@
 # Optional: the cluster runs the addon straight from the ConfigMap-mounted
 # source on a stock node image (see deployment.yaml). This Dockerfile mirrors
 # that layout for local/manual builds.
-FROM docker.io/library/node:22-alpine
+FROM docker.io/library/node:24-alpine
 WORKDIR /app
 COPY src ./src
 ENV PORT=7000
