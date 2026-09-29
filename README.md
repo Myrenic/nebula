@@ -152,6 +152,15 @@ Notes:
   client object itself has to be made with the Keycloak admin API, because nothing
   in this repository manages Keycloak's configuration. A rebuild from git alone
   therefore needs those three steps, which is the honest state of things.
+- One credential lives outside git *and* outside Keycloak: the read-only Proxmox
+  token the dashboard's `proxmox` widget reads. On the Proxmox host (`pve`,
+  `10.0.50.11`) there is a group `api-ro` (role `PVEAuditor` at `/`), a user
+  `glance@pve` in it, and a token `glance@pve!glance` with the same role; the
+  token's value is in `cluster-secrets` as `PROXMOX_TOKEN`, so a rebuild needs it
+  reissued (`pveum user token add glance@pve glance`) and the new value written
+  there. A `PVEAuditor` token can read the cluster's inventory and cannot change
+  anything - and, like every token in Proxmox, it is scoped by the ACLs on the
+  user and on the token, which is why both are granted here.
 
 ## Adding an app
 
