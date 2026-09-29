@@ -1,7 +1,7 @@
-# 2026-09-19: node reboots and the VM outage
+# 2026-09-19: node reboots
 
-Two things from the same session: a Traefik cleanup that was committed, and a VM
-that was unschedulable for nine hours and recovered on its own.
+Two things from the same session: a Traefik cleanup that was committed, and all
+three nodes restarting inside the hour with no upgrade behind it.
 
 ## 1. What changed (committed, `847f75d`)
 
@@ -36,39 +36,28 @@ structurally: lower `cluster.controllerManager.config.terminated-pod-gc-threshol
 in the machine config, or set `revisionHistoryLimit` low on busy Deployments. Not
 done now (YAGNI).
 
-## 2. Incident: VM `ws-ubuntu-vm-uec8434ac` was down (solved, by itself)
+## 2. All three nodes restarted, cause unknown
 
-Symptom: VM `ErrorUnschedulable` for 9 hours, virt-launcher `Pending`.
-
-Cause chain (proven, not guessed):
-
-1. **All three nodes had recently restarted** — uptime via
-   `talosctl read /proc/uptime`: `7uv-y3y` 06:11, `sz9-1vs` 06:20, `45w-c87`
-   07:07. The BootID of 45w-c87 changed (`a063c23d` -> `c1f8efe4`), so a real
-   reboot, not a kubelet restart.
-2. On `45w-c87` `virt-handler` stayed unhealthy after that -> KubeVirt sets
-   `kubevirt.io/schedulable=false` on that node.
-3. The VM has `nodeSelector: kubernetes.io/hostname=talos-45w-c87` -> no longer
-   placeable anywhere.
-4. During the reboot: Longhorn node `45w-c87` `Ready=False` (`ManagerPodDown`),
-   5 replicas `stopped`.
+Uptime via `talosctl read /proc/uptime`: `7uv-y3y` 06:11, `sz9-1vs` 06:20,
+`45w-c87` 07:07. The BootID of `45w-c87` changed (`a063c23d` -> `c1f8efe4`), so a
+real reboot, not a kubelet restart.
 
 Ruled out (verified, not assumed):
 
+- No Talos upgrade: the Omni cluster `default/talos-default` is on **1.13.8** and
+  kubelet reports `Talos (v1.13.8)`. Note: `talosctl version` also prints the client
+  version (1.13.9) — do not take that for the node version.
 - Network is **not** the cause: 30/30 connections to all three API servers
   (`10.0.50.116/.228/.218:6443`) from a pod on `45w-c87`, plus 7/7 to the VIP
   `10.96.0.1:443`.
-- No NetworkPolicy in `kubevirt`.
-- No Talos upgrade: the Omni cluster `default/talos-default` is on **1.13.8** and
-  kubelet reports `Talos (v1.13.8)`.
-  Note: `talosctl version` also prints the client version (1.13.9) — do not take
-  that for the node version.
 
-Recovery was automatic once the node finished booting: longhorn-manager back,
-virt-handler 1/1, label `true` again, all 9 volumes `attached` + `healthy`, VM
-`Running`.
+What a reboot costs, in the order it shows up: the node's Longhorn instance-manager
+goes `Ready=False` (`ManagerPodDown`) and its replicas stop until longhorn-manager
+is back, and workloads pinned to that node stay `Pending` until it returns. Both
+recover on their own: the last reboot left no volume unattached and needed no
+manual step.
 
-**Open:** why those three reboots? Not by me, and no upgrade. Probably the rollout
-of the corrected NVMe/machine-config patches. Talos keeps no logs of the previous
-boot, so the cause can no longer be established — but it is worth finding out
-whether this comes back.
+**Open:** why those three reboots? Not this repository, and no upgrade. Probably the
+rollout of the corrected NVMe/machine-config patches. Talos keeps no logs of the
+previous boot, so the cause can no longer be established — but it is worth finding
+out whether this comes back.

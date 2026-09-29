@@ -32,7 +32,7 @@ section 'flux paths and orphans'
 scripts/check-manifests.sh || fail=1
 
 # Every *.sops.yaml must actually be encrypted. A file named .sops.yaml without a
-# sops block is a plaintext secret with a reassuring name: that is how a TURN
+# sops block is a plaintext secret with a reassuring name: that is how a plaintext
 # shared secret once ended up in a public repository.
 section 'sops audit'
 while IFS= read -r file; do

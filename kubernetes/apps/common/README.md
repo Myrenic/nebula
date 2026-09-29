@@ -24,16 +24,15 @@ sops -d kubernetes/apps/common/cluster-secrets.sops.yaml   # read it back
 CI enforces the two rules that keep this honest: a file named `*.sops.yaml` must
 contain a `sops:` block and `ENC[` values, and no manifest may carry a
 plaintext-looking value in a `data:`/`stringData:` block. Both exist because a
-plaintext TURN secret was once committed to a public repository.
+plaintext shared secret was once committed to a public repository.
 
 Two things to know before touching this file:
 
 1. **Rendered values lose their quotes.** Flux substitutes into the manifest text
    before it parses it, and a placeholder that is a whole scalar ends up unquoted -
    so a numeric-looking value is applied as an integer and the API server rejects
-   the object (`stringData.TURN_PORT: expected string, got 3478`, from the TURN port
-   this bundle used to carry). Settings that look numeric stay literal in the
-   manifest; generated secrets are hex.
+   the object (`stringData.SOME_PORT: expected string, got 3478`). Settings that are
+   numbers stay literal in the manifest; generated secrets are hex.
 2. **This Secret is cluster-wide.** Kustomizations in the app repositories
    (`mushroom-finder`, `lucian-ghost`) substitute from it as well, and anything run
    by hand can read it. A key that no manifest references is therefore not
@@ -54,9 +53,9 @@ kubectl get helmreleases -A -o json | grep -c cluster-secrets
 ```
 
 40 keys were removed this way after their applications left the cluster (aiometadata,
-authentik, azure, code-server, comet, esphome, mediafusion, openposterdb, pihole,
-subtitles; the seven `SEXTANT_*` keys and `TURN_SHARED_SECRET` when the fleet control
-plane and the workspace desktops left; and the three `ENTRA_*` keys when Keycloak
-stopped brokering Microsoft), which is why the bundle holds 32 keys. Anything still
-installed elsewhere that read one of those keys would have failed loudly on its next
-render; nothing did.
+authentik, azure, code-server, comet, esphome, mediafusion, openposterdb, pihole and
+subtitles; eleven when the device-fleet control plane and the browser-desktop
+workspaces were removed, down to their session, signing and shared-secret keys; and
+three when Keycloak stopped brokering Microsoft), which is why the bundle holds 32
+keys. Anything still installed elsewhere that read one of those keys would have
+failed loudly on its next render; nothing did.
