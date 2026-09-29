@@ -1,0 +1,28 @@
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: glance
+  namespace: network
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    # SSO, like the other consoles (grafana, longhorn, traefik, flux, apps): what
+    # this host renders is the list of everything the cluster exposes, so it is
+    # not a public page, and it is not LAN-only either - it is the page you want
+    # on a phone away from home.
+    #
+    # Glance is configured without an auth block on purpose: oauth2-proxy is the
+    # only gate, so no second secret-key has to be generated, stored in
+    # cluster-secrets and rotated.
+    - match: Host(`glance.${SECRET_DOMAIN_0}`)
+      kind: Rule
+      middlewares:
+        - name: oauth2-proxy-auth
+          namespace: network
+      services:
+        - name: glance
+          namespace: services
+          port: 8080
+  tls:
+    secretName: domain-0-prod-tls

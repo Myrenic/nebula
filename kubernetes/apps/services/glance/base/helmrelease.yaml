@@ -1,0 +1,84 @@
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: glance
+spec:
+  interval: 1h
+  chartRef:
+    kind: OCIRepository
+    name: glance
+  values:
+    controllers:
+      glance:
+        containers:
+          app:
+            image:
+              repository: glanceapp/glance
+              # Pinned rather than `latest`, so the running version is visible and
+              # Renovate can move it. Upstream publishes vX.Y.Z tags on Docker Hub.
+              tag: v0.8.6
+            env:
+              TZ: "${TZ}"
+            probes:
+              # The root page is the only endpoint Glance serves that says anything
+              # about its health (the 401s in the config are oauth2-proxy's, and
+              # probes never go through Traefik). A render is served from the widget
+              # caches after the first one, so a probe is cheap; the thresholds are
+              # loose because that first render does reach the internet.
+              readiness:
+                enabled: true
+                custom: true
+                spec:
+                  httpGet:
+                    path: /
+                    port: 8080
+                  initialDelaySeconds: 5
+                  periodSeconds: 10
+                  timeoutSeconds: 5
+                  failureThreshold: 6
+              liveness:
+                enabled: true
+                custom: true
+                spec:
+                  httpGet:
+                    path: /
+                    port: 8080
+                  initialDelaySeconds: 30
+                  periodSeconds: 30
+                  timeoutSeconds: 5
+                  failureThreshold: 6
+            resources:
+              requests:
+                cpu: 10m
+                memory: 32Mi
+              limits:
+                memory: 256Mi
+            securityContext:
+              runAsNonRoot: true
+              allowPrivilegeEscalation: false
+              # The binary serves its UI from an embedded filesystem and caches in
+              # memory, and its config is a read-only mount, so it has no write
+              # path at all. Verified by running the image with --read-only.
+              readOnlyRootFilesystem: true
+              capabilities:
+                drop: ["ALL"]
+    defaultPodOptions:
+      securityContext:
+        # The image is plain alpine with no USER, so it would run as root; the
+        # config it reads is world-readable and it needs nothing else.
+        runAsUser: 65534
+        runAsGroup: 65534
+        seccompProfile:
+          type: RuntimeDefault
+    service:
+      app:
+        ports:
+          http:
+            port: 8080
+    persistence:
+      config:
+        type: configMap
+        name: glance-config
+        globalMounts:
+          - path: /app/config
+            readOnly: true

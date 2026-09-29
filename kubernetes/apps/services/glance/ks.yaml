@@ -1,0 +1,24 @@
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: glance
+  namespace: flux-system
+spec:
+  targetNamespace: services
+  interval: 1h
+  retryInterval: 1m
+  timeout: 5m
+  prune: true
+  path: ./kubernetes/apps/services/glance/base
+  sourceRef:
+    kind: GitRepository
+    name: flux-system
+    namespace: flux-system
+  postBuild:
+    substituteFrom:
+      - kind: Secret
+        name: cluster-secrets
+  # No dependsOn, unlike every app with a volume: Glance keeps nothing on disk
+  # (its cache is in memory and its config is a ConfigMap), so there is no
+  # longhorn to wait for and nothing to order against.
+  wait: false

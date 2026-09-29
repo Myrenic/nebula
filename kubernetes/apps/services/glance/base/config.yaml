@@ -1,0 +1,127 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: glance-config
+data:
+  # Glance's entry point runs it as `glance --config /app/config/glance.yml`, so
+  # this file *is* the dashboard. It is a mounted ConfigMap rather than an image
+  # build: kubelet refreshes the mount and Glance watches the file, so editing
+  # this and pushing is a reload, not a rollout.
+  #
+  # ${SECRET_DOMAIN_0} is substituted by Flux at build time (postBuild on the
+  # Kustomization), which is why no hostname here is literal. Glance's own
+  # ${ENV_VAR} syntax stays available for anything that must not be in git.
+  glance.yml: |
+    # The cluster's front page: what nebula exposes, and what this repository is
+    # doing. Nothing here is a secret and there is no `auth` block - the route
+    # that reaches Glance (kubernetes/apps/network/exposure/glance.yaml) is
+    # behind oauth2-proxy, which is the whole gate.
+    server:
+      # Traefik terminates TLS and oauth2-proxy forwards the request on, so the
+      # X-Forwarded-* headers are the only place the real client address lives.
+      proxied: true
+
+    branding:
+      app-name: nebula
+
+    pages:
+      - name: Home
+        columns:
+          - size: small
+            widgets:
+              - type: clock
+                hour-format: 24h
+
+              # Europe/Amsterdam is the cluster's own TZ (cluster-secrets), which
+              # is the only location hint this repository has. Open-Meteo needs
+              # no key, and it needs the country spelled out - "Amsterdam,
+              # Netherlands" geocodes to nothing, "The Netherlands" to the right
+              # one; the province pins it against the American Amsterdams.
+              - type: weather
+                location: Amsterdam, North Holland, The Netherlands
+                units: metric
+                hour-format: 24h
+
+          - size: full
+            widgets:
+              # One entry per exposed host, checked over the URL a browser uses -
+              # so DNS, the wildcard certificate and the route are covered along
+              # with the workload behind them. Prometheus blackbox and Uptime
+              # Kuma measure the same hosts and alert on them; this is the copy
+              # an operator reads before opening a terminal.
+              #
+              # alt-status-codes: 401 is what the oauth2-proxy forwardAuth answers
+              # an unauthenticated GET with, and that is the route working rather
+              # than failing. Everything else is expected to answer 200 (the two
+              # that redirect, keycloak and status, are followed to it).
+              - type: monitor
+                title: cluster
+                sites:
+                  - title: Forgejo
+                    url: https://code.${SECRET_DOMAIN_0}
+                    icon: di:forgejo
+                  - title: Grafana
+                    url: https://grafana.${SECRET_DOMAIN_0}
+                    icon: di:grafana
+                    alt-status-codes: [401]
+                  - title: Uptime Kuma
+                    url: https://status.${SECRET_DOMAIN_0}
+                    icon: di:uptime-kuma
+                  - title: Flux
+                    url: https://flux.${SECRET_DOMAIN_0}
+                    icon: di:flux-cd
+                    alt-status-codes: [401]
+                  - title: Longhorn
+                    url: https://longhorn.${SECRET_DOMAIN_0}
+                    icon: di:longhorn
+                    alt-status-codes: [401]
+                  - title: Traefik
+                    url: https://traefik.${SECRET_DOMAIN_0}
+                    icon: di:traefik
+                    alt-status-codes: [401]
+                  - title: Keycloak
+                    url: https://keycloak.${SECRET_DOMAIN_0}
+                    icon: di:keycloak
+                  - title: mytops
+                    url: https://apps.${SECRET_DOMAIN_0}
+                    alt-status-codes: [401]
+                  - title: Open WebUI
+                    url: https://chat.${SECRET_DOMAIN_0}
+                    icon: di:open-webui
+                  - title: SearXNG
+                    url: https://search.${SECRET_DOMAIN_0}
+                    icon: di:searxng
+                  - title: Home Assistant
+                    url: https://home.${SECRET_DOMAIN_0}
+                    icon: di:home-assistant
+                  - title: Frigate
+                    url: https://frigate.${SECRET_DOMAIN_0}
+                    icon: di:frigate
+                  - title: AIOStreams
+                    url: https://aiostreams.${SECRET_DOMAIN_0}
+                  - title: Spottarr
+                    url: https://spottarr.${SECRET_DOMAIN_0}
+                  - title: Stalker
+                    url: https://stalker.${SECRET_DOMAIN_0}
+                    icon: di:stremio
+                  - title: Mushrooms
+                    url: https://mushrooms.${SECRET_DOMAIN_0}
+                  - title: Lucian
+                    url: https://lucian.${SECRET_DOMAIN_0}
+                  # Not a cluster workload: a Service + Endpoints pair onto the
+                  # machine that runs Obsidian's CouchDB. It is listed because it
+                  # is exposed, and it is the one entry here that was already
+                  # failing when this dashboard was added - 10.0.3.46 answers
+                  # nothing on 5984, and Traefik turns that into a 502.
+                  - title: Obsidian sync
+                    url: https://obsidian.${SECRET_DOMAIN_0}
+                    icon: di:couchdb
+
+          - size: small
+            widgets:
+              # The repository the cluster converges from, live: the open Renovate
+              # and hand-written PRs, and the commits that have landed. No token,
+              # which is 60 unauthenticated GitHub requests per hour - against a
+              # widget whose own default cache is 1h.
+              - type: repository
+                repository: Myrenic/nebula

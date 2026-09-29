@@ -5,6 +5,7 @@ resources:
   - ./aiostreams
   - ./forgejo
   - ./frigate
+  - ./glance
   # These four deploy from their own repositories; only the GitRepository and
   # the Flux Kustomization live here.
   - ./lucian-cs
