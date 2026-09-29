@@ -2,9 +2,83 @@
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": ["config:recommended", ":dependencyDashboard", ":semanticCommits"],
   "labels": ["dependencies", "renovate"],
-  "enabledManagers": ["flux", "kubernetes", "github-actions"],
+  "enabledManagers": ["flux", "kubernetes", "github-actions", "dockerfile", "custom.regex"],
   "flux": { "fileMatch": ["kubernetes/.+\\.yaml$"] },
   "kubernetes": { "fileMatch": ["kubernetes/.+\\.yaml$"] },
+  "dockerfile": { "fileMatch": ["kubernetes/apps/services/stalker-stremio/base/Dockerfile"] },
+  "customManagers": [
+    {
+      "customType": "regex",
+      "description": "The Kubernetes version the Omni cluster template installs. Applying a bump reboots every machine, so it is never automerged (see the omni/** rule).",
+      "fileMatch": ["^omni/cluster-template\\.yaml$"],
+      "matchStrings": ["kubernetes:\\n  version: (?<currentValue>\\S+)"],
+      "datasourceTemplate": "github-releases",
+      "depNameTemplate": "kubernetes/kubernetes",
+      "extractVersionTemplate": "^v(?<version>\\d+\\.\\d+\\.\\d+)$"
+    },
+    {
+      "customType": "regex",
+      "description": "The Talos version the machines run. Same reboot, and Omni upgrades one minor at a time with irreversible database migrations behind it.",
+      "fileMatch": ["^omni/cluster-template\\.yaml$"],
+      "matchStrings": ["talos:\\n  version: (?<currentValue>\\S+)"],
+      "datasourceTemplate": "github-releases",
+      "depNameTemplate": "siderolabs/talos",
+      "extractVersionTemplate": "^v(?<version>\\d+\\.\\d+\\.\\d+)$"
+    },
+    {
+      "customType": "regex",
+      "description": "The Cilium version generate.sh renders cilium-install.yaml from. That generated file is never edited by Renovate - it would be undone by the next ./generate.sh - so this is the only place the version exists.",
+      "fileMatch": ["^omni/cilium/generate\\.sh$"],
+      "matchStrings": ["CILIUM_VERSION=\"\\$\\{CILIUM_VERSION:-(?<currentValue>[0-9.]+)\\}\""],
+      "datasourceTemplate": "github-releases",
+      "depNameTemplate": "cilium/cilium",
+      "extractVersionTemplate": "^v(?<version>\\d+\\.\\d+\\.\\d+)$"
+    },
+    {
+      "customType": "regex",
+      "description": "The Flux install manifests the one-time bootstrap applies. The running controllers come from these, so a bump is applied by hand with kubectl apply -k.",
+      "fileMatch": ["^kubernetes/bootstrap/kustomization\\.yaml$"],
+      "matchStrings": ["github\\.com/fluxcd/flux2/manifests/install\\?ref=(?<currentValue>\\S+)"],
+      "datasourceTemplate": "github-releases",
+      "depNameTemplate": "fluxcd/flux2",
+      "extractVersionTemplate": "^v(?<version>\\d+\\.\\d+\\.\\d+)$"
+    },
+    {
+      "customType": "regex",
+      "description": "The vendored Traefik CRD bundle, which has to move with the traefik image in network/traefik/base/deployment.yaml - they were allowed to drift once, and newer fields were silently pruned. Never automerged (see the vendored-files rule).",
+      "fileMatch": ["^kubernetes/apps/network/traefik-crds/crds\\.yaml$"],
+      "matchStrings": ["raw\\.githubusercontent\\.com/traefik/traefik/(?<currentValue>v[0-9.]+)/docs/"],
+      "datasourceTemplate": "github-releases",
+      "depNameTemplate": "traefik/traefik",
+      "extractVersionTemplate": "^v(?<version>\\d+\\.\\d+\\.\\d+)$"
+    },
+    {
+      "customType": "regex",
+      "description": "The kubectl the validation workflows install. It is deliberately not tied to the cluster's Kubernetes version: kubectl supports one minor either side, so this is a bump to review rather than to follow blindly.",
+      "fileMatch": ["^\\.github/workflows/.+\\.ya?ml$"],
+      "matchStrings": ["uses: azure/setup-kubectl@\\S+\\n(?:\\s+with:\\n)?\\s+version: (?<currentValue>\\S+)"],
+      "datasourceTemplate": "github-releases",
+      "depNameTemplate": "kubernetes/kubernetes",
+      "extractVersionTemplate": "^v(?<version>\\d+\\.\\d+\\.\\d+)$"
+    },
+    {
+      "customType": "regex",
+      "description": "yamllint, pinned with == in the validation workflows. A linter bump can change what passes, so it lands as a pull request.",
+      "fileMatch": ["^\\.github/workflows/.+\\.ya?ml$"],
+      "matchStrings": ["yamllint==(?<currentValue>\\S+)"],
+      "datasourceTemplate": "pypi",
+      "depNameTemplate": "yamllint"
+    },
+    {
+      "customType": "regex",
+      "description": "kubeconform, downloaded by version in the validation workflows.",
+      "fileMatch": ["^\\.github/workflows/.+\\.ya?ml$"],
+      "matchStrings": ["kubeconform/releases/download/(?<currentValue>v\\S+?)/kubeconform"],
+      "datasourceTemplate": "github-releases",
+      "depNameTemplate": "yannh/kubeconform",
+      "extractVersionTemplate": "^v(?<version>\\d+\\.\\d+\\.\\d+)$"
+    }
+  ],
   "prCreation": "immediate",
   "prConcurrentLimit": 10,
   "prHourlyLimit": 10,
@@ -29,7 +103,19 @@
       "automerge": false
     },
     {
-      "description": "The vendored Traefik CRDs have to move with the traefik image in network/traefik/base/deployment.yaml - the bundle is pinned by hand to the release the binary runs - so never automerge a bump inside it",
+      "description": "The cluster's own definition: the Omni template (Talos, Kubernetes) and the Cilium version generate.sh renders from. Never automerged, whatever the update type - applying one reboots every machine, Omni upgrades one minor at a time, and the Cilium manifest has to be regenerated and synced by hand afterwards.",
+      "matchFileNames": ["omni/**"],
+      "automerge": false,
+      "addLabels": ["cluster-upgrade"]
+    },
+    {
+      "description": "CI tooling is a bump to read, not one to follow the cluster with: yamllint, kubeconform and the kubectl the workflows install all change what a green check means.",
+      "matchFileNames": [".github/workflows/**"],
+      "automerge": false,
+      "addLabels": ["ci"]
+    },
+    {
+      "description": "The vendored Traefik CRD bundle has to move with the traefik image in network/traefik/base/deployment.yaml - it is pinned by hand to the release the binary runs - so never automerge a bump inside it.",
       "matchFileNames": [
         "kubernetes/apps/network/traefik-crds/crds.yaml"
       ],

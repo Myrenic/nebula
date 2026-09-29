@@ -25,6 +25,10 @@ spec:
   chart:
     spec:
       chart: flux-operator
+      # Pinned so Renovate can see it: unpinned, Helm takes whatever the OCI
+      # repository holds at the next reconcile, which is an upgrade nobody
+      # reviewed and no pull request records.
+      version: 0.60.0
       sourceRef:
         kind: HelmRepository
         name: flux-operator
