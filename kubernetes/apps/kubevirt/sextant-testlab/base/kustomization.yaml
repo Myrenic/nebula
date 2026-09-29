@@ -4,5 +4,6 @@ kind: Kustomization
 resources:
   - ./images.yaml
   - ./netrc-secret.yaml
+  - ./datavolumes.yaml
   - ./vm-test-1.yaml
   - ./vm-test-2.yaml

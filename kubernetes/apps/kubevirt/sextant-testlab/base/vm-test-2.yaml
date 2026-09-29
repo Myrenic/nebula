@@ -1,9 +1,10 @@
 # A test device for the fleet: the same NixOS configuration the overlay
 # generates for `vm-test-2`, booted in the cluster instead of on a laptop.
 #
-# The disk is imported by CDI from the store next door, so the guest runs the
-# image the fleet's generator produced - the image a real install would have put
-# on the machine - and not a generic cloud image with a hand-installed agent.
+# The disk is imported by CDI from the store next door (`datavolumes.yaml`) and
+# pinned to the checksum the build printed, so the guest runs the image the
+# fleet's generator produced - the image a real install would have put on the
+# machine - and not a generic cloud image with a hand-installed agent.
 #
 # Its identity (the per-device credential) is not here and never in git: it
 # arrives through cloud-init from the `vm-test-2-userdata` Secret, minted by the
@@ -14,27 +15,6 @@ metadata:
   name: vm-test-2
 spec:
   runStrategy: Always
-  dataVolumeTemplates:
-    - metadata:
-        name: vm-test-2-root
-      spec:
-        source:
-          http:
-            # Written by build-in-cluster.yaml (manual, not applied by Flux).
-            url: http://sextant-testlab-images.kubevirt.svc.cluster.local/vm-test-2.qcow2
-            # The checksum the build job printed for the bytes it wrote to the
-            # store. Without it CDI imports whatever the URL happens to return, and a
-            # truncated or stale disk boots into something nobody can explain.
-            checksum: sha256:e65e294b421032a4f674c63d1b4bb75ef7603303aaa77e8e7185462e8cec6bac
-        pvc:
-          accessModes:
-            - ReadWriteOnce
-          storageClassName: longhorn
-          resources:
-            requests:
-              # The image itself is ~2 GiB; the rest is headroom for what a
-              # device writes while it runs.
-              storage: 12Gi
   template:
     metadata:
       labels:

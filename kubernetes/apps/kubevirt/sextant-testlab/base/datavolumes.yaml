@@ -1,0 +1,47 @@
+# The two disks, as their own objects rather than templates inside the VMs.
+#
+# Not a style choice: this cluster's KubeVirt (v1.9.0) embeds a copy of the
+# DataVolume spec in its VirtualMachine CRD that predates CDI's `checksum` field,
+# so a disk declared inside the VM cannot pin one. A standalone DataVolume is
+# validated against CDI's own schema, which has it - and pinning is the point:
+# without it CDI imports whatever the URL happens to serve, and a truncated or
+# stale disk boots into something nobody can explain afterwards.
+#
+# The checksums are the ones build-in-cluster.yaml printed for the bytes it wrote
+# to the store. Rebuilding the images writes new ones.
+apiVersion: cdi.kubevirt.io/v1beta1
+kind: DataVolume
+metadata:
+  name: vm-test-1-root
+spec:
+  source:
+    http:
+      url: http://sextant-testlab-images.kubevirt.svc.cluster.local/vm-test-1.qcow2
+      checksum: sha256:a29b7402f1f316798521b89909971238cdaa9cc5becd2cdae16760677bf69c74
+  pvc:
+    accessModes:
+      - ReadWriteOnce
+    storageClassName: longhorn
+    resources:
+      requests:
+        # The image is ~2.3 GiB; the rest is headroom for what a device writes
+        # while it runs.
+        storage: 12Gi
+
+---
+apiVersion: cdi.kubevirt.io/v1beta1
+kind: DataVolume
+metadata:
+  name: vm-test-2-root
+spec:
+  source:
+    http:
+      url: http://sextant-testlab-images.kubevirt.svc.cluster.local/vm-test-2.qcow2
+      checksum: sha256:e65e294b421032a4f674c63d1b4bb75ef7603303aaa77e8e7185462e8cec6bac
+  pvc:
+    accessModes:
+      - ReadWriteOnce
+    storageClassName: longhorn
+    resources:
+      requests:
+        storage: 12Gi
