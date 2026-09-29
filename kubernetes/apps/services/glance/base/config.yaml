@@ -98,6 +98,84 @@ data:
           # numbers are what matters.
           - size: small
             widgets:
+              # Per-node health, read straight out of the in-cluster Prometheus
+              # HTTP API: no agent to install (a glances exporter cannot live on
+              # Talos), no docker socket, no new workload and no credential - the
+              # kube-prometheus-stack Prometheus is plain HTTP on 9090 with no
+              # authentication configured, and nothing in this repo blocks a pod
+              # in `services` from querying it.
+              #
+              # Two things about the query are deliberate. node-exporter carries
+              # no `node` label (the chart's relabeling is commented out), so the
+              # node name is joined in from node_uname_info's `nodename`, which on
+              # Talos is the node name. And the `ready` branch comes from
+              # kube-state-metrics, not from node-exporter, precisely because a
+              # node that stopped exporting disappears from every node-exporter
+              # series - without it, talos-sz9-1vs (NotReady) would silently be
+              # absent instead of visibly down. The `or` union keeps the four
+              # series apart by tagging each with its own `stat` label.
+              - type: custom-api
+                title: nodes
+                cache: 1m
+                url: http://kube-prometheus-stack-prometheus.monitoring.svc.cluster.local:9090/api/v1/query
+                headers:
+                  Accept: application/json
+                parameters:
+                  query: |-
+                    label_replace(
+                      100 * (1 - avg by (instance, nodename) (
+                        rate(node_cpu_seconds_total{mode="idle"}[5m]) * on(instance) group_left(nodename) node_uname_info
+                      )),
+                      "stat", "cpu", "instance", ".*"
+                    )
+                    or label_replace(
+                      100 * (1 - (
+                        (node_memory_MemAvailable_bytes * on(instance) group_left(nodename) node_uname_info)
+                        / (node_memory_MemTotal_bytes * on(instance) group_left(nodename) node_uname_info)
+                      )),
+                      "stat", "mem", "instance", ".*"
+                    )
+                    or label_replace(
+                      topk(1, 100 * (1 - (
+                        (node_filesystem_avail_bytes{fstype=~"xfs|ext4"} * on(instance) group_left(nodename) node_uname_info)
+                        / (node_filesystem_size_bytes{fstype=~"xfs|ext4"} * on(instance) group_left(nodename) node_uname_info)
+                      ))) by (instance, nodename),
+                      "stat", "disk", "instance", ".*"
+                    )
+                    or label_replace(
+                      label_replace(kube_node_status_condition{condition="Ready",status="true"}, "nodename", "$1", "node", "(.*)"),
+                      "stat", "ready", "node", ".*"
+                    )
+                template: |
+                  {{ $results := .JSON.Array "data.result" }}
+                  {{ $nodes := unique "metric.nodename" (sortByString "metric.nodename" "asc" $results) }}
+                  <ul class="list list-gap-14">
+                    {{ range $nodes }}
+                      {{ $node := .String "metric.nodename" }}
+                      <li>
+                        <div class="flex items-center gap-7">
+                          <span class="size-h4 color-highlight text-truncate">{{ $node }}</span>
+                          {{ range $results }}
+                            {{ if and (eq (.String "metric.nodename") $node) (eq (.String "metric.stat") "ready") }}
+                              {{ if eq (.String "value.1") "0" }}<span class="size-h6 color-negative">DOWN</span>{{ end }}
+                            {{ end }}
+                          {{ end }}
+                        </div>
+                        {{ range $results }}
+                          {{ if and (eq (.String "metric.nodename") $node) (ne (.String "metric.stat") "ready") }}
+                            <div>
+                              <div class="flex justify-between size-h5">
+                                <span class="uppercase" title="{{ .String "metric.mountpoint" }}">{{ .String "metric.stat" }}</span>
+                                <span class="color-highlight">{{ printf "%.0f" (.Float "value.1") }}%</span>
+                              </div>
+                              <div class="progress-bar"><div class="progress-value" style="--percent: {{ printf "%.0f" (.Float "value.1") }}"></div></div>
+                            </div>
+                          {{ end }}
+                        {{ end }}
+                      </li>
+                    {{ end }}
+                  </ul>
+
               # One entry per exposed host, checked over the URL a browser uses -
               # so DNS, the wildcard certificate and the route are covered along
               # with the workload behind them. Prometheus blackbox and Uptime
@@ -162,3 +240,65 @@ data:
                     url: https://mushrooms.${SECRET_DOMAIN_0}
                   - title: Lucian
                     url: https://lucian.${SECRET_DOMAIN_0}
+
+              # AIOStreams' own view of the addons it aggregates - the thing the
+              # monitor above cannot see, because those addons are not hosts of
+              # ours: they live inside AIOStreams' config, so there is no URL to
+              # probe. This reads the per-addon analytics it already records
+              # (requests, errors, error rate, average latency), which is the
+              # closest thing to "is torrentio having a bad day".
+              #
+              # The dashboard API only takes a session cookie - Basic auth gets
+              # the HTML login page back with a 200, which is how this looked
+              # like it worked at first - so the template signs in, takes the
+              # cookie off the login response, and asks with it. Credentials come
+              # from cluster-secrets; the ConfigMap holds ${...}, never values.
+              #
+              # A 7-day window, not 24h: analytics only count real requests, so a
+              # quiet day would empty the list and read as broken rather than
+              # quiet. In-cluster URL on purpose: there is no reason to send this
+              # through Traefik and back.
+              #
+              # The 15m cache is not arbitrary: the login endpoint is rate
+              # limited to 5 requests per 5 minutes per IP, and the cluster and
+              # the browser that opens this page share one egress address. One
+              # login per quarter hour leaves the humans their budget, and a
+              # refused login renders as a sentence rather than a failed widget,
+              # because "rate limited" is not "AIOStreams is broken".
+              - type: custom-api
+                title: aiostreams addons (7d)
+                cache: 15m
+                template: |
+                  {{ $base := "http://aiostreams.services.svc.cluster.local:3000" }}
+                  {{ $login := newRequest (concat $base "/api/v1/auth/login")
+                      | withHeader "Content-Type" "application/json"
+                      | withStringBody (printf `{"username":"%s","password":"%s"}` "${AIOSTREAMS_AUTH_USER}" "${AIOSTREAMS_AUTH_PASSWORD}")
+                      | getResponse }}
+                  {{ if ne $login.Response.StatusCode 200 }}
+                    <div class="color-base">AIOStreams login answered {{ $login.Response.StatusCode }}</div>
+                  {{ else }}
+                    {{ $cookie := findMatch "^[^;]+" ($login.Response.Header.Get "Set-Cookie") }}
+                    {{ $addons := newRequest (concat $base "/api/v1/dashboard/analytics/addons?range=7d")
+                        | withHeader "Cookie" $cookie
+                        | withHeader "Accept" "application/json"
+                        | getResponse }}
+                    {{ if ne $addons.Response.StatusCode 200 }}
+                      <div class="color-base">AIOStreams answered {{ $addons.Response.StatusCode }}</div>
+                    {{ else if eq (len ($addons.JSON.Array "data.addons")) 0 }}
+                      <div class="color-base">no requests in the last 7 days</div>
+                    {{ else }}
+                      <ul class="list list-gap-10">
+                        {{ range sortByInt "requests" "desc" ($addons.JSON.Array "data.addons") }}
+                          <li>
+                            <div class="flex justify-between items-center gap-10">
+                              <span class="color-highlight text-truncate">{{ .String "presetId" }}</span>
+                              <span class="size-h6 {{ if gt (.Int "errors") 0 }}color-negative{{ else }}color-positive{{ end }}">
+                                {{ if gt (.Int "errors") 0 }}{{ .Int "errors" }} err{{ else }}ok{{ end }}
+                              </span>
+                            </div>
+                            <div class="size-h6 color-base text-truncate">{{ .Int "requests" }} req &middot; {{ printf "%.1f" (.Float "errorRate") }}% &middot; {{ .Int "avgLatencyMs" }}ms</div>
+                          </li>
+                        {{ end }}
+                      </ul>
+                    {{ end }}
+                  {{ end }}
