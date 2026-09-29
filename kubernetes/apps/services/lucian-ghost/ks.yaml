@@ -2,11 +2,11 @@
 # https://github.com/Myrenic/lucian-ghost. Everything platform-side stays here:
 # this Kustomization and the ingress route in network/exposure.
 #
-# Unlike lucian-cs this one does need postBuild substitution: Ghost has to know
-# its own public URL (https://lucian.${SECRET_DOMAIN_0}), and the backup CronJob
-# wants the cluster's timezone. envsubst runs over every resource here, which is
-# why the theme travels as gzipped base64 in a ConfigMap - base64 has no "$" in
-# its alphabet, so no template can collide with a ${VARIABLE}.
+# This one does need postBuild substitution: Ghost has to know its own public URL
+# (https://lucian.${SECRET_DOMAIN_0}), and the backup CronJob wants the cluster's
+# timezone. envsubst runs over every resource here, which is why the theme travels
+# as gzipped base64 in a ConfigMap - base64 has no "$" in its alphabet, so no
+# template can collide with a ${VARIABLE}.
 #
 # dependsOn longhorn: the content volume is a Longhorn claim, and Ghost cannot
 # start before the storage class exists.

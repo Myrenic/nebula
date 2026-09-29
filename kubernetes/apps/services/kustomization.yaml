@@ -7,9 +7,8 @@ resources:
   - ./forgejo
   - ./frigate
   - ./glance
-  # These three deploy from their own repositories; only the GitRepository and
+  # These two deploy from their own repositories; only the GitRepository and
   # the Flux Kustomization live here.
-  - ./lucian-cs
   - ./lucian-ghost
   - ./mushroom-finder
   - ./open-webui

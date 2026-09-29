@@ -23,12 +23,11 @@ later.
 | Other apps | aiostreams, forgejo, frigate (+ reolinkproxy), glance, open-webui, searxng, spottarr, stalker-stremio, uptime-kuma | `kubernetes/apps/services/` |
 | Outside the cluster | homeassistant - reachable through a Service + Endpoints pair that points at another machine | `kubernetes/apps/network/exposure/` |
 
-Three applications keep their code and manifests in their own repositories, because
+Two applications keep their code and manifests in their own repositories, because
 their CI builds artefacts that a GitOps repo should not contain:
 
 | App | Repository | URL |
 | --- | --- | --- |
-| lucian-cs | `Myrenic/lucian-cs` | no route; `lucian.${SECRET_DOMAIN_0}` is served by lucian-ghost |
 | lucian-ghost | `Myrenic/lucian-ghost` | `https://lucian.${SECRET_DOMAIN_0}` |
 | mushroom-finder | `Myrenic/mushroom-finder` | `https://mushrooms.${SECRET_DOMAIN_0}` |
 
