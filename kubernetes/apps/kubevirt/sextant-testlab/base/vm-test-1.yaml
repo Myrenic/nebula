@@ -22,6 +22,10 @@ spec:
           http:
             # Written by build-in-cluster.yaml (manual, not applied by Flux).
             url: http://sextant-testlab-images.kubevirt.svc.cluster.local/vm-test-1.qcow2
+            # The checksum the build job printed for the bytes it wrote to the
+            # store. Without it CDI imports whatever the URL happens to return, and a
+            # truncated or stale disk boots into something nobody can explain.
+            checksum: sha256:a29b7402f1f316798521b89909971238cdaa9cc5becd2cdae16760677bf69c74
         pvc:
           accessModes:
             - ReadWriteOnce

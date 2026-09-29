@@ -85,6 +85,17 @@ kubectl -n kubevirt get dv,vm,vmi
 kubectl -n kubevirt get dv vm-test-1-root -o jsonpath='{.status.phase}{"\n"}'
 ```
 
+The disks currently in the store, as `build-in-cluster.yaml` wrote them:
+
+| Disk | Bytes | Built from |
+| --- | --- | --- |
+| `vm-test-1.qcow2` | 2 469 593 088 | overlay `2d4d0d4`, sha256 `a29b7402…69c74` |
+| `vm-test-2.qcow2` | 2 469 658 624 | overlay `2d4d0d4`, sha256 `e65e294b…c6bac` |
+
+Each VM's `DataVolume` pins that checksum, so an import that would boot
+something else fails instead. Rebuilding writes new disks and new checksums:
+update both, or delete the checksum line and accept whatever the URL serves.
+
 An import failing with `404` means the build job has not written that disk yet -
 `vm-test-1.qcow2` is what the URL names. Re-running the job and deleting the
 DataVolume (`kubectl -n kubevirt delete dv vm-test-1-root`) imports the new disk;
