@@ -1,7 +1,7 @@
 # Traefik CRDs, vendored from the upstream v3.7.0 documentation bundle:
 #   https://raw.githubusercontent.com/traefik/traefik/v3.7.0/docs/content/reference/dynamic-configuration/kubernetes-crd-definition-v1.yml
 #
-# Vendored on purpose, same as the Cilium and KubeVirt CRDs in this repo:
+# Vendored on purpose, same as the Cilium CRDs in omni/cilium/:
 #   * the version now moves with the traefik image in
 #     kubernetes/apps/network/traefik/base/deployment.yaml (it used to be the
 #     3.1 bundle while the binary ran 3.7, so newer fields were silently pruned);

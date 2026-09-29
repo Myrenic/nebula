@@ -210,13 +210,6 @@ spec:
           includedNamespaces:
             - auth
             - services
-            # sextant holds one thing nothing else can rebuild: the Postgres
-            # database with the LUKS recovery keys escrowed from provisioned
-            # devices. Its own chart-level backup is off (the chart writes to S3
-            # and this cluster has Azure Blob), so this capture is what exists
-            # today - and a file-level capture of a running database is a copy of
-            # the volume, not a database backup.
-            - sextant
       apps-monthly:
         schedule: "13 4 1 * *"
         template:
@@ -225,4 +218,3 @@ spec:
           includedNamespaces:
             - auth
             - services
-            - sextant

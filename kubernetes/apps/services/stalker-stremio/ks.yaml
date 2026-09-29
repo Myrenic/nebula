@@ -9,9 +9,9 @@ spec:
   retryInterval: 1m
   timeout: 5m
   prune: true
-  wait: true
   path: ./kubernetes/apps/services/stalker-stremio/base
   sourceRef:
     kind: GitRepository
     name: flux-system
     namespace: flux-system
+  wait: true

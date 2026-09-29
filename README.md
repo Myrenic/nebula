@@ -16,22 +16,20 @@ later.
 | --- | --- | --- |
 | CNI | Cilium 1.20, installed once by the Omni template, manages itself after | `omni/cilium/` |
 | Ingress | Traefik v3 (2 replicas), the only LoadBalancer service, `10.0.50.4` | `kubernetes/apps/network/` |
-| Identity | oauth2-proxy in front of Keycloak (realm `mytops`), OIDC; the forge signs in against the same realm directly; Keycloak brokers Microsoft (Entra ID) sign-in | `kubernetes/apps/auth/` |
+| Identity | oauth2-proxy in front of Keycloak (realm `nebula`), OIDC; the forge signs in against the same realm directly; Keycloak's own `master` realm is for administration only | `kubernetes/apps/auth/` |
 | Certificates | cert-manager with a Cloudflare DNS-01 ClusterIssuer, wildcard cert | `kubernetes/apps/cert-manager/` |
 | Storage | Longhorn 1.11, one replica by default, `longhorn-2-replicas` on request | `kubernetes/apps/storage/` |
-| Virtualization | KubeVirt + CDI, one VM workspace today | `kubernetes/apps/kubevirt/` |
 | Observability | kube-prometheus-stack, Loki, Promtail, blackbox probes per discovered host, Telegram alerts | `kubernetes/apps/monitoring/` |
-| Workspaces | `mytops`: browser desktops and VMs, its own repository | `kubernetes/apps/services/mytops/` |
-| Fleet | Sextant, the control plane for managed NixOS devices, on its own CloudNativePG database; Keycloak is its identity provider, a git repository is the fleet's configuration | `kubernetes/apps/sextant/` |
 | Other apps | aiostreams, forgejo, frigate (+ reolinkproxy), glance, open-webui, searxng, spottarr, stalker-stremio, uptime-kuma | `kubernetes/apps/services/` |
 | Outside the cluster | homeassistant - reachable through a Service + Endpoints pair that points at another machine | `kubernetes/apps/network/exposure/` |
 
-Two applications keep their code and manifests in their own repositories, because
+Three applications keep their code and manifests in their own repositories, because
 their CI builds artefacts that a GitOps repo should not contain:
 
 | App | Repository | URL |
 | --- | --- | --- |
-| mytops | `Myrenic/mytops` | `https://apps.${SECRET_DOMAIN_0}` |
+| lucian-cs | `Myrenic/lucian-cs` | no route; `lucian.${SECRET_DOMAIN_0}` is served by lucian-ghost |
+| lucian-ghost | `Myrenic/lucian-ghost` | `https://lucian.${SECRET_DOMAIN_0}` |
 | mushroom-finder | `Myrenic/mushroom-finder` | `https://mushrooms.${SECRET_DOMAIN_0}` |
 
 Each directory here holds only the deployment contract for them: a `GitRepository`
@@ -47,21 +45,14 @@ flowchart TB
   lb["MetalLB L2<br/>10.0.50.4"]
   traefik["Traefik v3 - 2 replicas<br/>wildcard TLS via cert-manager + Cloudflare DNS-01"]
   oauth["oauth2-proxy"]
-  keycloak["Keycloak<br/>realm mytops"]
+  keycloak["Keycloak<br/>realm nebula"]
   apps["services, monitoring, storage apps<br/>one IngressRoute per host"]
-  mytops["mytops: SPA + workplace API<br/>kubectl-proxy sidecar on loopback"]
-  workspaces["workspace Deployments / Services / IngressRoutes"]
-  vms["KubeVirt VMs + CDI DataVolumes"]
   longhorn[("Longhorn<br/>RWO, reclaimPolicy Retain")]
 
   browser --> lb --> traefik
   traefik -->|"forwardAuth"| oauth --> keycloak
   traefik -->|Host match| apps
-  traefik -->|"Host apps.domain"| mytops
-  mytops -->|provisions| workspaces
-  mytops -->|provisions| vms
-  workspaces --> longhorn
-  vms --> longhorn
+  apps --> longhorn
 ```
 
 Exposure is a decision, not an omission: a route is either behind
@@ -76,7 +67,6 @@ a route is none of those.
 | `omni/` | The cluster itself: the Omni template (machines, disk patches, Talos version) and the Cilium install manifest |
 | `kubernetes/apps/` | Everything Flux applies, one directory per namespace, one subdirectory per app |
 | `kubernetes/apps/network/exposure/` | The public surface: one file per host, plus middlewares, the wildcard certificate and the external endpoints |
-| `kubernetes/apps/mytops-control/` | Cluster-scoped and cross-namespace grants for the workspace API, in one place |
 | `kubernetes/apps/common/cluster-secrets.sops.yaml` | The only encrypted file in this repository |
 | `kubernetes/bootstrap/` | Flux itself, applied once by hand (`kubectl apply -k`) |
 | `docs/` | Cluster notes, incident reports, runbooks - see [docs/README.md](docs/README.md) |
@@ -91,23 +81,34 @@ else. Each app directory follows the same shape:
 
 ```
 kubernetes/apps/<namespace>/<app>/
-  kustomization.yaml    # resources: [ks.yaml]  (what the root finds)
+  kustomization.yaml    # resources: [./ks.yaml]  (what the root finds)
   ks.yaml               # a Flux Kustomization: path ./base, targetNamespace, substitutions
   base/
     kustomization.yaml  # the actual objects
     helmrelease.yaml    # ...usually one HelmRelease using the bjw-s app-template
 ```
 
-Two deliberate exceptions, both because Flux rewrites namespaces:
+Four rules keep every app directory identical in shape, so that a reader who knows
+one app knows all of them:
+
+- every `kustomization.yaml` opens with the `# yaml-language-server: $schema=...`
+  line, so an editor validates it;
+- every `resources` entry is `./`-prefixed, because a bare name reads as neither a
+  file nor a directory;
+- the list is sorted alphabetically, with `namespace.yaml` first, and nothing in it
+  decides what is applied first - kustomize renders namespaces and CRDs ahead of the
+  objects that use them;
+- every `ks.yaml` states its `spec` keys in the same order - `targetNamespace`,
+  `interval`, `retryInterval`, `timeout`, `prune`, `force`, `path`, `sourceRef`,
+  `postBuild`, `decryption`, `dependsOn`, `wait`, `healthChecks` - and omits the ones
+  it does not need rather than reordering the rest.
+
+One deliberate exception, because Flux rewrites namespaces:
 
 - `kubernetes/apps/network/exposure/` is applied by its `ks.yaml` directly
   (`path: ./kubernetes/apps/network/exposure`), not through a `base/` directory:
   the routes, middlewares and the certificate are siblings on purpose, so the
   directory is readable as the list of reachable hosts.
-- `kubernetes/apps/mytops-control/` sets no `targetNamespace` and is applied by the
-  root Kustomization. Its objects each declare a namespace of their own (`network`,
-  `storage`, `kubevirt`); a Flux Kustomization with `targetNamespace: services`
-  would move every one of them into `services`, where they grant nothing.
 
 Ordering is expressed with `dependsOn` instead of luck: `traefik` waits for
 `cert-manager-issuers` and `metallb-pool`, every app with a volume waits for
@@ -144,20 +145,15 @@ Notes:
 - `kubernetes/apps/flux-system/flux-instance/flux-system-secret.sops.yaml` is kept
   only as an encrypted backup of the old deploy key and is not part of any
   kustomization.
-- Four things are created by hand and are in no manifest: the oauth2-proxy
-  client secret (`keycloak-webui-oauth` in `auth`), the `forgejo` client in
-  Keycloak realm `mytops`, the `sextant` client and its `sextant-owners` group in
-  that same realm, and the age key above. The first is documented in
-  `kubernetes/apps/auth/README.md`; the second is a confidential OIDC client whose
-  only redirect URI is `https://code.<domain>/user/oauth2/keycloak/callback` and
-  whose secret *is* in git, encrypted, as `FORGEJO_OAUTH_CLIENT_SECRET` - the
-  client object itself has to be made with the Keycloak admin API, because nothing
-  in this repository manages Keycloak's configuration. The third is the same
-  shape, with the commands written out in `kubernetes/apps/sextant/README.md`
-  together with the one thing that is neither in git nor in Keycloak: the overlay
-  repository the console pushes to and the token it pushes with, which live on the
-  cluster's own forge. A rebuild from git alone therefore needs those four steps,
-  which is the honest state of things.
+- Three things are created by hand and are in no manifest: the Keycloak realm
+  `nebula` and its two clients, the `keycloak-webui-oauth` Secret that holds the
+  oauth2-proxy client's secret and its cookie secret, and the age key above. The
+  realm is one API call - realm, both clients, both redirect URIs and both secrets,
+  written out in `kubernetes/apps/auth/README.md` together with the order to move
+  between realms in - and the forge's client secret is the one part of it that is
+  in git, encrypted, as `FORGEJO_OAUTH_CLIENT_SECRET`, because its value also has
+  to be in the HelmRelease. A rebuild from git alone therefore needs those three
+  steps and a user account, which is the honest state of things.
 - One credential lives outside git *and* outside Keycloak: the read-only Proxmox
   token the dashboard's `proxmox` widget reads. On the Proxmox host (`pve`,
   `10.0.50.11`) there is a group `api-ro` (role `PVEAuditor` at `/`), a user
@@ -175,16 +171,19 @@ Notes:
    `kustomize.toolkit.fluxcd.io/prune: disabled` so removing it from git cannot
    delete a namespace full of data.
 2. Create `kubernetes/apps/<namespace>/<app>/{kustomization.yaml,ks.yaml,base/}` as
-   above. Copy `ks.yaml` from a sibling app: `targetNamespace`, `interval: 1h`,
-   `retryInterval: 1m`, `prune: true`, `path: ./kubernetes/apps/.../base`,
-   `postBuild.substituteFrom: cluster-secrets`, and a `dependsOn` for anything the
-   app needs first (`longhorn` for volumes, `cert-manager-issuers` for certificates).
-3. Add the app directory to the namespace's `kustomization.yaml`, and the namespace
-   to `kubernetes/apps/kustomization.yaml` if it is new.
+   above. Copy `ks.yaml` from a sibling app and keep the `spec` key order described
+   under How Flux is wired: `targetNamespace`, `interval: 1h`, `retryInterval: 1m`,
+   `timeout: 5m`, `prune: true`, `path: ./kubernetes/apps/<namespace>/<app>/base`,
+   `sourceRef` to `flux-system`, `postBuild.substituteFrom: cluster-secrets`, and a
+   `dependsOn` for anything the app needs first (`longhorn` for volumes,
+   `cert-manager-issuers` for certificates).
+3. Add the app directory to the namespace's `kustomization.yaml` (alphabetically, so
+   the diff is one line), and the namespace to `kubernetes/apps/kustomization.yaml`
+   if it is new.
 4. Put the objects in `base/`. Prefer the bjw-s `app-template` HelmRelease with an
-   `OCIRepository` next to it (five of the nine apps do); hand-written manifests are
-   for things a chart cannot express, and then set `resources`, a
-   `securityContext`, and readiness/liveness probes explicitly.
+   `OCIRepository` next to it; hand-written manifests are for things a chart cannot
+   express, and then set `resources`, a `securityContext`, and readiness/liveness
+   probes explicitly.
 5. Add `kubernetes/apps/network/exposure/<app>.yaml` with the route. Choose
    `oauth2-proxy-auth`, `lan-only`, or `public` with a reason in a comment - CI
    enforces that choice either way.
@@ -196,14 +195,12 @@ Notes:
 
 ## Vendored and generated files
 
-Four files in this repository are upstream artefacts rather than authored
+Two files in this repository are upstream artefacts rather than authored
 manifests. They are committed so a bootstrap needs no network access beyond git:
 
 | File | What it is | How it is updated |
 | --- | --- | --- |
-| `kubernetes/apps/kubevirt/operator/base/operator.yaml` | KubeVirt operator bundle (8.7k lines) | Renovate opens a PR and does **not** automerge it: the image tag and the CRDs have to move together (`manual-upgrade` label) |
-| `kubernetes/apps/kubevirt/cdi/base/operator.yaml` | CDI operator bundle (5.8k lines) | Same |
-| `kubernetes/apps/network/traefik-crds/crds.yaml` | Traefik CRDs, which the Helm chart does not ship | Same |
+| `kubernetes/apps/network/traefik-crds/crds.yaml` | Traefik CRDs, which the Helm chart does not ship | Renovate opens a PR and does **not** automerge it (`manual-upgrade` label): the bundle has to move with the traefik image in `network/traefik/base/deployment.yaml` |
 | `omni/cilium/cilium-install.yaml` | Cilium CRDs + chart in one manifest (21k lines) | `cd omni/cilium && CILIUM_VERSION=<v> ./generate.sh`, which fails the build if the result loses the Talos-critical settings |
 
 The generated files also appear in `.yamllint`'s ignore list: they are never
@@ -220,25 +217,6 @@ documented in [kubernetes/apps/common/README.md](kubernetes/apps/common/README.m
 Two rules are enforced by CI, both because they were once broken: a `*.sops.yaml`
 file must actually contain a `sops:` block and `ENC[` values, and no manifest may
 carry a plaintext-looking value in a `data:`/`stringData:` block.
-
-## Cross-namespace RBAC
-
-The workspace API reaches the cluster through a `kubectl proxy` sidecar bound to the
-pod's loopback interface, using one ServiceAccount (`mytops-control`). Because a
-single Kustomization here cannot carry `targetNamespace` and still land grants in
-several namespaces, every grant lives in one directory instead of next to the app it
-serves:
-
-| Grant | Namespace | File |
-| --- | --- | --- |
-| create/delete workspace IngressRoutes | `network` | `kubernetes/apps/mytops-control/network.yaml` |
-| delete Longhorn volumes on VM teardown, reclaim CDI scratch volumes | `storage` | `kubernetes/apps/mytops-control/storage.yaml` |
-| manage VirtualMachines, DataVolumes, their Secrets, Services and PVCs | `kubevirt` | `kubernetes/apps/mytops-control/kubevirt.yaml` |
-
-Two consequences the API code has to respect: the network Role grants
-`get/list/create/delete` and **no `update`**, so repairing a drifted route is
-delete-then-create and a PUT is answered with 403; and the Longhorn CRs live in
-`storage`, not in the operator's default namespace.
 
 ## CI and local checks
 
@@ -298,7 +276,7 @@ health after a push, so:
 ```bash
 flux reconcile kustomization flux-system --with-source
 flux get kustomizations --status-selector ready=false
-kubectl -n services rollout status deploy/mytops-webui --timeout=180s
+kubectl -n services rollout status deploy/forgejo --timeout=180s
 ```
 
 ## Operating notes
@@ -354,11 +332,6 @@ kubectl -n services rollout status deploy/mytops-webui --timeout=180s
   application. Those mounts are `subPath`, which the kubelet does not refresh under
   a running pod: after a theme change,
   `kubectl -n services rollout restart deploy/forgejo`.
-- **Workspace streams are owner-scoped.** Workspace IngressRoutes carry the
-  `oauth2-proxy-auth` and `mytops-workspace-owner` middlewares; the second one asks
-  the workplace API whether the signed-in user owns the host in the request, because
-  a workspace host is derived from its owner's email and authentication alone would
-  let any user in the realm open anyone's desktop.
 - **Restore an individual app from git:**
 
   ```bash

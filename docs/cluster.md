@@ -8,7 +8,7 @@ change anything directly with `talosctl` on a node: it gets rolled back.
 Everything belongs here.
 
 **A change to the machine config makes all nodes reboot.** Count on 5-15 minutes
-in which the cluster is completely gone, including the VMs.
+in which the cluster is completely gone.
 
 ## Files
 
@@ -301,8 +301,8 @@ replica costs disk and buys a drain that does not depend on the policy.
 Either way the volumes on the node being rebooted are unavailable while it is down.
 That is expected, and Longhorn recovers them: after the reboot `frigate-media` came
 back faulted, and `autoSalvage` rebuilt its engine from the on-disk replica on the next
-mount. The same reboot left 98 dead coturn pod objects behind (its pods are pinned to
-one node for its public IP); those clean up with
+mount. The same reboot left 98 dead pod objects behind, from a workload whose pods are
+pinned to one node; those clean up with
 
 ```bash
 kubectl -n services delete pod --field-selector=status.phase=Failed

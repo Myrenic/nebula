@@ -115,10 +115,18 @@ spec:
         # a container added later is protected by default, and this line is the
         # only thing that has to be reconsidered when it is not wanted.
         backup.velero.io/backup-volumes-excludes: media
-      # Frigate needs an Intel iGPU for VA-API/QSV (LIBVA_DRIVER_NAME=iHD);
-      # AMD nodes have no /dev/dri render node it can use.
-      nodeSelector:
-        cpu-vendor.node.kubevirt.io/Intel: "true"
+      # Frigate needs an Intel iGPU for VA-API/QSV (LIBVA_DRIVER_NAME=iHD); the
+      # third machine is a Proxmox VM with no /dev/dri render node it can use.
+      # The label is the i915 extension those two machines install through
+      # omni/cluster-template.yaml, so it is a property of git rather than of a
+      # node labeller that could stop writing it.
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: extensions.talos.dev/i915
+                    operator: Exists
       securityContext:
         seccompProfile:
           type: RuntimeDefault

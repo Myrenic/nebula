@@ -32,8 +32,8 @@ section 'flux paths and orphans'
 scripts/check-manifests.sh || fail=1
 
 # Every *.sops.yaml must actually be encrypted. A file named .sops.yaml without a
-# sops block is a plaintext secret with a reassuring name: that is how the mytops
-# TURN shared secret once ended up in a public repository.
+# sops block is a plaintext secret with a reassuring name: that is how a TURN
+# shared secret once ended up in a public repository.
 section 'sops audit'
 while IFS= read -r file; do
   grep -q '^sops:' "$file" || { note "missing sops block: $file"; fail=1; }
@@ -78,7 +78,7 @@ section 'yaml style'
 yamllint --config-file .yamllint . || fail=1
 
 # -ignore-missing-schemas: the cluster runs CRDs from Flux, Traefik, Longhorn,
-# KubeVirt, cert-manager and the Prometheus operator, which the upstream schema
+# cert-manager and the Prometheus operator, which the upstream schema
 # registry does not serve, and an unknown kind must not fail this gate. -strict is
 # deliberately absent for the same reason.
 section 'manifest schemas'

@@ -38,7 +38,7 @@ spec:
         passwordMode: keepUpdated
       # The login source, created from these values by the chart's init container
       # (gitea admin auth add-oauth). The client is a hand-made object in realm
-      # mytops - see the note in the README - with exactly one redirect URI:
+      # nebula - see the note in the README - with exactly one redirect URI:
       # https://code.<domain>/user/oauth2/keycloak/callback
       #
       # The scopes are not optional: add-oauth defaults the source to "openid"
@@ -55,7 +55,7 @@ spec:
           provider: openidConnect
           key: forgejo
           secret: "${FORGEJO_OAUTH_CLIENT_SECRET}"
-          autoDiscoverUrl: "https://keycloak.${SECRET_DOMAIN_0}/realms/mytops/.well-known/openid-configuration"
+          autoDiscoverUrl: "https://keycloak.${SECRET_DOMAIN_0}/realms/nebula/.well-known/openid-configuration"
           scopes: "openid,email,profile"
       config:
         APP_NAME: "code.${SECRET_DOMAIN_0}"
@@ -77,7 +77,7 @@ spec:
           DISABLE_REGISTRATION: true
         # How the Keycloak source above is allowed to make accounts. Together these
         # two give the model the rest of the cluster already has (oauth2-proxy's
-        # email-domain is *): anyone in realm mytops gets an account on first
+        # email-domain is *): anyone in realm nebula gets an account on first
         # sign-in, and a login whose address belongs to an existing account links
         # to it - which is what keeps the admin account the admin account. Set
         # ENABLE_AUTO_REGISTRATION to false and every new person needs an account

@@ -2,8 +2,8 @@ apiVersion: v1
 kind: Namespace
 metadata:
   name: network
+  annotations:
+    kustomize.toolkit.fluxcd.io/prune: disabled
   labels:
     # privileged on purpose: the MetalLB speaker runs with hostNetwork, NET_ADMIN and NET_RAW.
     pod-security.kubernetes.io/enforce: privileged
-  annotations:
-    kustomize.toolkit.fluxcd.io/prune: disabled

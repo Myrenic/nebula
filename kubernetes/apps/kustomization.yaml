@@ -1,21 +1,18 @@
+# yaml-language-server: $schema=https://json.schemastore.org/kustomization
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
+# One directory per namespace, sorted alphabetically so that adding a namespace
+# does not also decide where in the list it lands. Each one carries its own
+# namespace.yaml, whatever is applied straight from this root (the
+# cluster-secrets Secret, the vendored Traefik CRDs) and one Flux Kustomization
+# per app.
 resources:
-  - common
-  # The backup layer. Applied this early so its namespace exists before the
-  # Flux Kustomization that reconciles into it.
-  - backup
-  - flux-system
-  - cert-manager
-  - network
-  - storage
-  - kubevirt
-  - services
-  # Cluster-scoped and cross-namespace grants, applied straight from here because
-  # a Flux Kustomization with a targetNamespace would rewrite their namespace and
-  # move a grant into a namespace where it means nothing. See the header of
-  # kubernetes/apps/mytops-control/kustomization.yaml.
-  - mytops-control
-  - auth
-  - sextant
-  - monitoring
+  - ./auth
+  - ./backup
+  - ./cert-manager
+  - ./common
+  - ./flux-system
+  - ./monitoring
+  - ./network
+  - ./services
+  - ./storage

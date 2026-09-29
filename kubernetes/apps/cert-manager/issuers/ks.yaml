@@ -12,12 +12,12 @@ spec:
     kind: GitRepository
     name: flux-system
     namespace: flux-system
-  dependsOn:
-    - name: cert-manager
   postBuild:
     substituteFrom:
       - kind: Secret
         name: cluster-secrets
+  dependsOn:
+    - name: cert-manager
   healthChecks:
     - apiVersion: cert-manager.io/v1
       kind: ClusterIssuer

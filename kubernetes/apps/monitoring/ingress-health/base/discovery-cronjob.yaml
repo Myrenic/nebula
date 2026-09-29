@@ -3,6 +3,7 @@
 # `kubectl apply` straight at the API server. It deliberately does not live in
 # git - it used to be declared here as well, and Flux kept resetting the target
 # list to the single placeholder target on every reconcile.
+
 ---
 apiVersion: v1
 kind: ConfigMap
@@ -56,10 +57,6 @@ data:
         for HOST in "${HOSTS[@]}"; do
           [[ -z "${HOST}" ]] && continue
           [[ "${HOST}" == *"*"* ]] && continue
-          # Workspace hosts are per-user: the mytops-workspace-owner middleware
-          # answers 404 to anyone who is not the owner, so an anonymous probe can
-          # only ever report them as broken. They are the application's business.
-          [[ "${HOST}" == ws-* ]] && continue
           if [[ "${HOST}" =~ ^[A-Za-z0-9.-]+$ ]] && [[ "${HOST}" == *.* ]]; then
             printf 'https://%s\n' "${HOST}" >> "${TARGETS_FILE}"
           fi
@@ -102,6 +99,7 @@ data:
     } > "${PROBE_MANIFEST}"
 
     kubectl apply -f "${PROBE_MANIFEST}"
+
 ---
 apiVersion: batch/v1
 kind: CronJob

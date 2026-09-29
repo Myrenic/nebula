@@ -9,6 +9,7 @@ spec:
       port: 8123
       protocol: TCP
       targetPort: 8123
+
 ---
 apiVersion: v1
 kind: Endpoints
@@ -22,6 +23,7 @@ subsets:
       - name: http
         port: 8123
         protocol: TCP
+
 ---
 apiVersion: traefik.io/v1alpha1
 kind: IngressRoute

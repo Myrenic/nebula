@@ -1,5 +1,10 @@
+# yaml-language-server: $schema=https://json.schemastore.org/kustomization
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:
-  - github.com/fluxcd/flux2/manifests/install?ref=v2.7.5
+  # Sorted like every other list here, and the order does not decide what lands
+  # first: kubectl and Flux render the CRDs from the install base ahead of the
+  # GitRepository and Kustomization that need them, whichever way round these two
+  # are listed.
   - ../apps/flux-system/flux-instance
+  - github.com/fluxcd/flux2/manifests/install?ref=v2.7.5

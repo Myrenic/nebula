@@ -14,9 +14,9 @@ spec:
     kind: GitRepository
     name: flux-system
     namespace: flux-system
-  dependsOn:
-    - name: cert-manager-issuers
   postBuild:
     substituteFrom:
       - kind: Secret
         name: cluster-secrets
+  dependsOn:
+    - name: cert-manager-issuers

@@ -1,9 +1,0 @@
-# yaml-language-server: $schema=https://json.schemastore.org/kustomization
-apiVersion: kustomize.config.k8s.io/v1beta1
-kind: Kustomization
-resources:
-  - ./images.yaml
-  - ./netrc-secret.yaml
-  - ./datavolumes.yaml
-  - ./vm-test-1.yaml
-  - ./vm-test-2.yaml

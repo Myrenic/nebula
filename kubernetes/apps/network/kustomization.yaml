@@ -1,13 +1,14 @@
+# yaml-language-server: $schema=https://json.schemastore.org/kustomization
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:
   - ./namespace.yaml
-  - ./traefik
   # The routes are their own Flux Kustomization whose path is this directory
   # itself (there is no base/ here), so this one entry stays a file rather than a
   # directory: listing ./exposure would apply the routes a second time, straight
   # from the root Kustomization.
   - ./exposure/ks.yaml
-  - traefik-crds/
   - ./metallb
   - ./metallb-pool
+  - ./traefik
+  - ./traefik-crds

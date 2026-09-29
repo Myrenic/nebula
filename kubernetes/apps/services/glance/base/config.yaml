@@ -374,9 +374,6 @@ data:
                   - title: Keycloak
                     url: https://keycloak.${SECRET_DOMAIN_0}
                     icon: di:keycloak
-                  - title: mytops
-                    url: https://apps.${SECRET_DOMAIN_0}
-                    alt-status-codes: [401]
                   - title: Open WebUI
                     url: https://chat.${SECRET_DOMAIN_0}
                     icon: di:open-webui

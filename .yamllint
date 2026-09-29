@@ -19,8 +19,6 @@ rules:
 # Vendored and generated files: they must stay byte-identical to what upstream
 # ships, so they are never reformatted here.
 ignore: |
-  kubernetes/apps/kubevirt/operator/base/operator.yaml
-  kubernetes/apps/kubevirt/cdi/base/operator.yaml
   kubernetes/apps/network/traefik-crds/crds.yaml
   omni/cilium/cilium-install.yaml
   kubernetes/apps/services/stalker-stremio/base/src/**

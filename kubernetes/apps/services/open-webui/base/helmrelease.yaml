@@ -43,9 +43,9 @@ spec:
               # from cluster-secrets by Flux's postBuild. They are deliberately not
               # in a *.sops.yaml file next to this manifest: SOPS decryption is
               # per-Kustomization (spec.decryption, which only the root,
-              # monitoring-kube-prometheus-stack and mytops set), so a secret file
-              # under an app that forgets it is applied as ciphertext. aiostreams
-              # is in exactly that state - its aiostreams-secret carries
+              # backup-velero and monitoring-kube-prometheus-stack set), so a
+              # secret file under an app that forgets it is applied as ciphertext.
+              # aiostreams is in exactly that state - its aiostreams-secret carries
               # ENC[AES256_GCM,...] in the cluster right now, masked only because
               # its `env:` overrides its `envFrom:`.
               WEBUI_SECRET_KEY: "${OPENWEBUI_SECRET_KEY}"

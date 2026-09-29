@@ -1,3 +1,4 @@
+# yaml-language-server: $schema=https://json.schemastore.org/kustomization
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:
@@ -6,12 +7,11 @@ resources:
   - ./forgejo
   - ./frigate
   - ./glance
-  # These four deploy from their own repositories; only the GitRepository and
+  # These three deploy from their own repositories; only the GitRepository and
   # the Flux Kustomization live here.
   - ./lucian-cs
   - ./lucian-ghost
   - ./mushroom-finder
-  - ./mytops
   - ./open-webui
   - ./searxng
   - ./spottarr

@@ -29,10 +29,8 @@
       "automerge": false
     },
     {
-      "description": "Vendored upstream operator bundles must move as a whole (image tag + CRDs + KUBEVIRT_VERSION env), so never automerge image bumps inside them",
+      "description": "The vendored Traefik CRDs have to move with the traefik image in network/traefik/base/deployment.yaml - the bundle is pinned by hand to the release the binary runs - so never automerge a bump inside it",
       "matchFileNames": [
-        "kubernetes/apps/kubevirt/operator/base/operator.yaml",
-        "kubernetes/apps/kubevirt/cdi/base/operator.yaml",
         "kubernetes/apps/network/traefik-crds/crds.yaml"
       ],
       "automerge": false,

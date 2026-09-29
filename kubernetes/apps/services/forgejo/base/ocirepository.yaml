@@ -15,6 +15,7 @@ spec:
   ref:
     tag: 17.1.7
   url: oci://code.forgejo.org/forgejo-helm/forgejo
+
 ---
 # Postgres, deployed the way this repository deploys Postgres: app-template,
 # next to the app it serves, not the chart's bundled subchart.

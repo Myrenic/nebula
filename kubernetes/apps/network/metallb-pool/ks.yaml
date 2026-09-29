@@ -6,9 +6,6 @@ metadata:
 spec:
   targetNamespace: network
   interval: 1h
-  dependsOn:
-    - name: metallb
-      namespace: flux-system
   retryInterval: 1m
   timeout: 5m
   prune: true
@@ -21,4 +18,6 @@ spec:
     substituteFrom:
       - kind: Secret
         name: cluster-secrets
-
+  dependsOn:
+    - name: metallb
+      namespace: flux-system
