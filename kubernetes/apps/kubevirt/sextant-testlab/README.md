@@ -89,8 +89,8 @@ The disks currently in the store, as `build-in-cluster.yaml` wrote them:
 
 | Disk | Bytes | Built from |
 | --- | --- | --- |
-| `vm-test-1.qcow2` | 2 469 593 088 | overlay `2d4d0d4`, sha256 `a29b7402…69c74` |
-| `vm-test-2.qcow2` | 2 469 658 624 | overlay `2d4d0d4`, sha256 `e65e294b…c6bac` |
+| `vm-test-1.qcow2` | 2 469 724 160 | overlay `b5179e2`, sha256 `c36aa8f8…308f4` |
+| `vm-test-2.qcow2` | 2 469 658 624 | overlay `b5179e2`, sha256 `c667deb4…b6e9d` |
 
 Each VM's disk is a `DataVolume` of its own (`datavolumes.yaml`), pinned to the
 sha256 above, so an import that would boot something else fails instead.
@@ -116,6 +116,27 @@ kubectl -n kubevirt exec -it vm-test-1 -- journalctl -u sextant-agent -n 20
 ```
 
 `kubectl exec` into a VM needs the KubeVirt guest agent (the image enables it).
+
+## What this path does not do
+
+- **No host key on file.** The console learns a device's SSH host key from the
+  *station* at imaging time (`recordHostKey` in the station API), and these
+  devices never met one, so their device pages say "No host key recorded - device
+  secrets cannot be encrypted for this device" and the agenix recipient path has
+  nothing to seal to. Everything else about them is a normal device.
+- **No hardware spec.** The same is true of the asset facts a station captures
+  (`spec`); the VMs report usage and posture, not a fingerprint.
+- **Nothing is imaged.** There is no partitioner, no Secure Boot ceremony and no
+  TPM2 sealing here - the disk arrives already built, which is the one step an
+  imaging station exists to perform.
+- **Org settings the VM image does not declare are skipped, but still listed.**
+  The generator skips a setting whose option this image does not have (the
+  overlay passes `catalogKeys`), which is why the organisation's enforced
+  `secureboot` is not forced onto these VMs. The console's effective-configuration
+  panel still resolves it from the scope chain, so a device can read "settings
+  due" for something its image deliberately ignores. Per-class catalog export
+  (`sextant.lib.exportCatalogFromClassOptions`) is what closes that gap, and it
+  needs a device of each class to export from.
 
 ## Removing it
 

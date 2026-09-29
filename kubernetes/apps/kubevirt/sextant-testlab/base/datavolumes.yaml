@@ -17,7 +17,7 @@ spec:
   source:
     http:
       url: http://sextant-testlab-images.kubevirt.svc.cluster.local/vm-test-1.qcow2
-      checksum: sha256:a29b7402f1f316798521b89909971238cdaa9cc5becd2cdae16760677bf69c74
+      checksum: sha256:c36aa8f8d543bac6895bc8de0ad16c58c98219a0bc5b0c0a661c3ed2106308f4
   pvc:
     accessModes:
       - ReadWriteOnce
@@ -37,7 +37,7 @@ spec:
   source:
     http:
       url: http://sextant-testlab-images.kubevirt.svc.cluster.local/vm-test-2.qcow2
-      checksum: sha256:e65e294b421032a4f674c63d1b4bb75ef7603303aaa77e8e7185462e8cec6bac
+      checksum: sha256:c667deb4d2408eae789b2888512ef6acd448cfb4237d621ddea90c76451b6e9d
   pvc:
     accessModes:
       - ReadWriteOnce
