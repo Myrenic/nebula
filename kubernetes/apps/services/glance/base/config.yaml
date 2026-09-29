@@ -73,6 +73,115 @@ data:
                 issues-limit: 1
                 commits-limit: 3
 
+          # Middle, wide: the two feeds. They are the only widgets here that
+          # want the width, which is why the column carries it.
+          - size: full
+            widgets:
+              # Tweakers' news feed. feeds.tweakers.net does not resolve; the
+              # working URL is the one their own RSS page links to.
+              - type: rss
+                title: Tweakers
+                limit: 10
+                collapse-after: 5
+                feeds:
+                  - url: https://tweakers.net/feeds/nieuws.xml
+
+              # The subreddit this cluster's software comes from. vertical-list is
+              # the style written for a full column (vertical-cards is the one for
+              # a small column), and it is the only style that takes
+              # show-thumbnails and collapse-after.
+              - type: reddit
+                title: r/selfhosted
+                subreddit: selfhosted
+                style: vertical-list
+                show-thumbnails: true
+                limit: 10
+                collapse-after: 5
+                sort-by: hot
+
+          # Right, narrow: the cluster itself. One host per row, because a narrow
+          # column cannot lay the list out in two - the names are short and the
+          # numbers are what matters.
+          - size: small
+            widgets:
+              # Per-node health, read straight out of the in-cluster Prometheus
+              # HTTP API: no agent to install (a glances exporter cannot live on
+              # Talos), no docker socket, no new workload and no credential - the
+              # kube-prometheus-stack Prometheus is plain HTTP on 9090 with no
+              # authentication configured, and nothing in this repo blocks a pod
+              # in `services` from querying it.
+              #
+              # Two things about the query are deliberate. node-exporter carries
+              # no `node` label (the chart's relabeling is commented out), so the
+              # node name is joined in from node_uname_info's `nodename`, which on
+              # Talos is the node name. And the `ready` branch comes from
+              # kube-state-metrics, not from node-exporter, precisely because a
+              # node that stopped exporting disappears from every node-exporter
+              # series - without it, talos-sz9-1vs (NotReady) would silently be
+              # absent instead of visibly down. The `or` union keeps the four
+              # series apart by tagging each with its own `stat` label.
+              - type: custom-api
+                title: nodes
+                cache: 1m
+                url: http://kube-prometheus-stack-prometheus.monitoring.svc.cluster.local:9090/api/v1/query
+                headers:
+                  Accept: application/json
+                parameters:
+                  query: |-
+                    label_replace(
+                      100 * (1 - avg by (instance, nodename) (
+                        rate(node_cpu_seconds_total{mode="idle"}[5m]) * on(instance) group_left(nodename) node_uname_info
+                      )),
+                      "stat", "cpu", "instance", ".*"
+                    )
+                    or label_replace(
+                      100 * (1 - (
+                        (node_memory_MemAvailable_bytes * on(instance) group_left(nodename) node_uname_info)
+                        / (node_memory_MemTotal_bytes * on(instance) group_left(nodename) node_uname_info)
+                      )),
+                      "stat", "mem", "instance", ".*"
+                    )
+                    or label_replace(
+                      topk(1, 100 * (1 - (
+                        (node_filesystem_avail_bytes{fstype=~"xfs|ext4"} * on(instance) group_left(nodename) node_uname_info)
+                        / (node_filesystem_size_bytes{fstype=~"xfs|ext4"} * on(instance) group_left(nodename) node_uname_info)
+                      ))) by (instance, nodename),
+                      "stat", "disk", "instance", ".*"
+                    )
+                    or label_replace(
+                      label_replace(kube_node_status_condition{condition="Ready",status="true"}, "nodename", "$1", "node", "(.*)"),
+                      "stat", "ready", "node", ".*"
+                    )
+                template: |
+                  {{ $results := .JSON.Array "data.result" }}
+                  {{ $nodes := unique "metric.nodename" (sortByString "metric.nodename" "asc" $results) }}
+                  <ul class="list list-gap-14">
+                    {{ range $nodes }}
+                      {{ $node := .String "metric.nodename" }}
+                      <li>
+                        <div class="flex items-center gap-7">
+                          <span class="size-h4 color-highlight text-truncate">{{ $node }}</span>
+                          {{ range $results }}
+                            {{ if and (eq (.String "metric.nodename") $node) (eq (.String "metric.stat") "ready") }}
+                              {{ if eq (.String "value.1") "0" }}<span class="size-h6 color-negative">DOWN</span>{{ end }}
+                            {{ end }}
+                          {{ end }}
+                        </div>
+                        {{ range $results }}
+                          {{ if and (eq (.String "metric.nodename") $node) (ne (.String "metric.stat") "ready") }}
+                            <div>
+                              <div class="flex justify-between size-h5">
+                                <span class="uppercase" title="{{ .String "metric.mountpoint" }}">{{ .String "metric.stat" }}</span>
+                                <span class="color-highlight">{{ printf "%.0f" (.Float "value.1") }}%</span>
+                              </div>
+                              <div class="progress-bar"><div class="progress-value" style="--percent: {{ printf "%.0f" (.Float "value.1") }}"></div></div>
+                            </div>
+                          {{ end }}
+                        {{ end }}
+                      </li>
+                    {{ end }}
+                  </ul>
+
               # The hypervisor the cluster's VMs and every LXC on this box actually
               # run on, read from its own API. The token is glance@pve!glance - a
               # PVEAuditor (read-only) token this repository does not create,
@@ -224,115 +333,6 @@ data:
                         </div>
                       </div>
                     </li>
-                    {{ end }}
-                  </ul>
-
-          # Middle, wide: the two feeds. They are the only widgets here that
-          # want the width, which is why the column carries it.
-          - size: full
-            widgets:
-              # Tweakers' news feed. feeds.tweakers.net does not resolve; the
-              # working URL is the one their own RSS page links to.
-              - type: rss
-                title: Tweakers
-                limit: 10
-                collapse-after: 5
-                feeds:
-                  - url: https://tweakers.net/feeds/nieuws.xml
-
-              # The subreddit this cluster's software comes from. vertical-list is
-              # the style written for a full column (vertical-cards is the one for
-              # a small column), and it is the only style that takes
-              # show-thumbnails and collapse-after.
-              - type: reddit
-                title: r/selfhosted
-                subreddit: selfhosted
-                style: vertical-list
-                show-thumbnails: true
-                limit: 10
-                collapse-after: 5
-                sort-by: hot
-
-          # Right, narrow: the cluster itself. One host per row, because a narrow
-          # column cannot lay the list out in two - the names are short and the
-          # numbers are what matters.
-          - size: small
-            widgets:
-              # Per-node health, read straight out of the in-cluster Prometheus
-              # HTTP API: no agent to install (a glances exporter cannot live on
-              # Talos), no docker socket, no new workload and no credential - the
-              # kube-prometheus-stack Prometheus is plain HTTP on 9090 with no
-              # authentication configured, and nothing in this repo blocks a pod
-              # in `services` from querying it.
-              #
-              # Two things about the query are deliberate. node-exporter carries
-              # no `node` label (the chart's relabeling is commented out), so the
-              # node name is joined in from node_uname_info's `nodename`, which on
-              # Talos is the node name. And the `ready` branch comes from
-              # kube-state-metrics, not from node-exporter, precisely because a
-              # node that stopped exporting disappears from every node-exporter
-              # series - without it, talos-sz9-1vs (NotReady) would silently be
-              # absent instead of visibly down. The `or` union keeps the four
-              # series apart by tagging each with its own `stat` label.
-              - type: custom-api
-                title: nodes
-                cache: 1m
-                url: http://kube-prometheus-stack-prometheus.monitoring.svc.cluster.local:9090/api/v1/query
-                headers:
-                  Accept: application/json
-                parameters:
-                  query: |-
-                    label_replace(
-                      100 * (1 - avg by (instance, nodename) (
-                        rate(node_cpu_seconds_total{mode="idle"}[5m]) * on(instance) group_left(nodename) node_uname_info
-                      )),
-                      "stat", "cpu", "instance", ".*"
-                    )
-                    or label_replace(
-                      100 * (1 - (
-                        (node_memory_MemAvailable_bytes * on(instance) group_left(nodename) node_uname_info)
-                        / (node_memory_MemTotal_bytes * on(instance) group_left(nodename) node_uname_info)
-                      )),
-                      "stat", "mem", "instance", ".*"
-                    )
-                    or label_replace(
-                      topk(1, 100 * (1 - (
-                        (node_filesystem_avail_bytes{fstype=~"xfs|ext4"} * on(instance) group_left(nodename) node_uname_info)
-                        / (node_filesystem_size_bytes{fstype=~"xfs|ext4"} * on(instance) group_left(nodename) node_uname_info)
-                      ))) by (instance, nodename),
-                      "stat", "disk", "instance", ".*"
-                    )
-                    or label_replace(
-                      label_replace(kube_node_status_condition{condition="Ready",status="true"}, "nodename", "$1", "node", "(.*)"),
-                      "stat", "ready", "node", ".*"
-                    )
-                template: |
-                  {{ $results := .JSON.Array "data.result" }}
-                  {{ $nodes := unique "metric.nodename" (sortByString "metric.nodename" "asc" $results) }}
-                  <ul class="list list-gap-14">
-                    {{ range $nodes }}
-                      {{ $node := .String "metric.nodename" }}
-                      <li>
-                        <div class="flex items-center gap-7">
-                          <span class="size-h4 color-highlight text-truncate">{{ $node }}</span>
-                          {{ range $results }}
-                            {{ if and (eq (.String "metric.nodename") $node) (eq (.String "metric.stat") "ready") }}
-                              {{ if eq (.String "value.1") "0" }}<span class="size-h6 color-negative">DOWN</span>{{ end }}
-                            {{ end }}
-                          {{ end }}
-                        </div>
-                        {{ range $results }}
-                          {{ if and (eq (.String "metric.nodename") $node) (ne (.String "metric.stat") "ready") }}
-                            <div>
-                              <div class="flex justify-between size-h5">
-                                <span class="uppercase" title="{{ .String "metric.mountpoint" }}">{{ .String "metric.stat" }}</span>
-                                <span class="color-highlight">{{ printf "%.0f" (.Float "value.1") }}%</span>
-                              </div>
-                              <div class="progress-bar"><div class="progress-value" style="--percent: {{ printf "%.0f" (.Float "value.1") }}"></div></div>
-                            </div>
-                          {{ end }}
-                        {{ end }}
-                      </li>
                     {{ end }}
                   </ul>
 
