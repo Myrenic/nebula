@@ -339,9 +339,13 @@ kubectl -n services rollout status deploy/forgejo --timeout=180s
   own templates and only paints over them, so an upgrade moves the markup under it
   and the pages stay themed. Which theme a realm uses is a realm setting -
   `loginTheme: nebula`, hand-made with the rest of realm `nebula`, see
-  `kubernetes/apps/auth/README.md`. A production server caches theme files on top
-  of the `subPath` rule, so after a theme change,
-  `kubectl -n auth rollout restart deploy/keycloak`.
+  `kubernetes/apps/auth/README.md`. Two caches sit on top of that: theme files are
+  cached in memory by a production server, and the browser holds the stylesheet
+  under a URL that does not change when the file does, so after a theme change,
+  `kubectl -n auth rollout restart deploy/keycloak`. The browser's copy is capped
+  at ten minutes rather than Keycloak's 30-day default
+  (`KC_SPI_THEME_STATIC_MAX_AGE`), so the next visit picks it up; a hard reload
+  does it immediately.
 - **Restore an individual app from git:**
 
   ```bash

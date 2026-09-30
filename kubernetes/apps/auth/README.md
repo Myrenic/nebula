@@ -149,6 +149,17 @@ started in production caches theme files in memory.
 kubectl -n auth rollout restart deploy/keycloak
 ```
 
+A third cache is the browser's, and it is the one that makes a theme change look
+like it did not happen. Theme resources are served with `Cache-Control`, and the
+URL they are served from - `/resources/<key>/login/nebula/css/nebula.css` - does
+not change when the stylesheet does; measured against 26.7.4, the `<key>` survives
+both an edit to `theme.properties` and a restart of the server. At Keycloak's
+default of 30 days, anyone who has loaded the sign-in page once would keep the old
+stylesheet for a month. `KC_SPI_THEME_STATIC_MAX_AGE: "600"` in the HelmRelease
+pulls that down to ten minutes, which is short enough that a change appears on the
+next visit and long enough that the PatternFly bundle is still cached the rest of
+the time. A hard reload shows it immediately either way.
+
 That is the whole loop - a stylesheet change, a push, and that restart. Light and
 dark are not two themes: the colour set is chosen by the class Keycloak's own
 script puts on `<html>` from `prefers-color-scheme`.

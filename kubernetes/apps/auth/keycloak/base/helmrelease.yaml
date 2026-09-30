@@ -36,6 +36,15 @@ spec:
               KC_HOSTNAME_STRICT: "true"
               KC_PROXY_HEADERS: xforwarded
               KC_HTTP_ENABLED: "true"
+              # Theme resources are served with a cache header, and the URL they
+              # are served from does not change when a stylesheet does (measured
+              # against 26.7.4: the /resources/<key>/... segment is stable across a
+              # theme edit and a restart). At the default, 30 days, a browser that
+              # has loaded the sign-in page once keeps the old stylesheet for a
+              # month; ten minutes is short enough that a theme change shows up on
+              # the next visit and long enough that the PatternFly bundle still
+              # comes from cache the rest of the time.
+              KC_SPI_THEME_STATIC_MAX_AGE: "600"
               KC_HEALTH_ENABLED: "true"
               KC_HTTP_MANAGEMENT_HEALTH_ENABLED: "true"
               KC_HTTP_MANAGEMENT_SCHEME: http
