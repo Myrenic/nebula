@@ -7,28 +7,30 @@
  * redefine the tokens the engine already paints from, then add the few rules that
  * have no token, and keep !important for the places the engine itself uses it.
  *
- * Painted in layers, deepest first:
+ * The look is Apple's, which means restraint, and four rules hold it together:
  *
- *   html, body      obsidian at night, a light wash by day - never #000 - plus
- *                   three colour orbs (cyan, magenta, violet) that drift behind
- *                   everything. They are the reason the glass has anything to
- *                   refract: a blur over a flat colour is just a grey card.
- *   .pf-v5-c-login__main
- *                   the glass pane: translucent fill, 26px backdrop blur with a
- *                   saturation lift, 1px specular border, inset highlight, deep
- *                   drop shadow, a diagonal sheen, and a cyan ring whenever it
- *                   holds focus.
- *   inputs, buttons their own small glass planes, with the cyan focus glow and
- *                   the submit button's sheen sweep on hover.
+ *   one accent,  the system blue, and it is the only saturated colour on the page.
+ *                Semantic colour is Apple's too - red, amber, green - and appears
+ *                only where it means something. Everything else is a neutral grey.
+ *   type         the system stack (SF on Apple hardware, Segoe on Windows), 17px
+ *                body, 13px labels, tight tracking on the heading, nothing
+ *                uppercase and nothing letter-spaced.
+ *   material     translucency used quietly: a blurred pane and blurred wells, a
+ *                1px hairline, a soft diffuse shadow, one faint specular sheen
+ *                along the top edge. No glows, no coloured light, no drifting
+ *                background - the page behind the pane is a flat neutral with one
+ *                soft highlight at the top, so nothing moves and nothing shouts.
+ *   motion       short and eased, never springy: 8px of travel on load, 180ms
+ *                colour transitions, a 0.985 press. A sign-in page is not a place
+ *                to show off; it is a place to be finished quickly.
  *
  * Deviations from the design system this was drawn from, and why: that document
  * assumes a React app - Framer Motion for the micro-interactions, liquidGL and a
  * WebGPU shader for the refraction. A Keycloak theme is a stylesheet and, at most,
- * FreeMarker templates, served to whatever browser reaches the login page. So the
- * micro-interactions here are CSS transitions and keyframes (spring-ish easings on
- * the same 0.05s stagger), and the refraction is backdrop-filter over a moving
- * gradient. No JavaScript is added: the only script on these pages is the engine's
- * own, and a login form is the last place to want one of ours.
+ * FreeMarker templates, served to whatever browser reaches the login page, so the
+ * interactions here are CSS transitions and the refraction is backdrop-filter over
+ * a static background. No JavaScript is added: the only script on these pages is
+ * the engine's own.
  *
  * Light and dark: the colour set is selected by the class the engine's own script
  * puts on <html> (`pf-v5-theme-dark`, from prefers-color-scheme) rather than by a
@@ -36,110 +38,100 @@
  */
 
 :root {
-  /* Accents. The three that carry the design, plus the cluster's own sky - the
-     light-blue tint - which is what the mark's glow and the light theme's links
-     are drawn from, so the sign-in page and the forge still look related. */
-  --nb-cyan: #00f0ff;
-  --nb-magenta: #f000ff;
-  --nb-violet: #7b00ff;
-  --nb-sky: #8ec8e8;
+  /* Accents: the system colours, and the whole palette. */
+  --nb-accent: #0071e3;
+  --nb-accent-hover: #0077ed;
+  --nb-accent-press: #006edb;
+  --nb-accent-ring: rgba(0, 113, 227, 0.35);
 
-  /* Radii. Generous, because the refraction optics read as wrong on a tight
-     corner: pills for anything pressable, 28px for the pane, 14px for wells. */
-  --nb-radius-pane: 28px;
-  --nb-radius-well: 14px;
-  --nb-radius-pill: 999px;
+  /* Radii: Apple's scale - 20px for a card, 12px for anything you can press or
+     type into. Nothing here is a pill. */
+  --nb-radius-card: 20px;
+  --nb-radius-control: 12px;
 
   /* One easing for everything that moves, so the page has a single feel. */
-  --nb-ease: cubic-bezier(0.16, 1, 0.3, 1);
-
-  /* Day, the default below the block that follows. A light wash with the same
-     three accents, much further down in opacity: enough colour for the pane to
-     refract, not enough to cost contrast. */
-  --nb-page:
-    radial-gradient(120% 90% at 12% 0%, rgba(0, 240, 255, 0.16), transparent 55%),
-    radial-gradient(110% 80% at 100% 8%, rgba(240, 0, 255, 0.1), transparent 55%),
-    radial-gradient(120% 100% at 70% 110%, rgba(123, 0, 255, 0.12), transparent 60%),
-    linear-gradient(168deg, #f2f6fc 0%, #e7edf8 100%);
-  --nb-orb-a: rgba(0, 240, 255, 0.42);
-  --nb-orb-b: rgba(123, 0, 255, 0.28);
-  --nb-orb-c: rgba(240, 0, 255, 0.22);
-
-  --nb-glass: linear-gradient(
-    155deg,
-    rgba(255, 255, 255, 0.68) 0%,
-    rgba(255, 255, 255, 0.36) 46%,
-    rgba(255, 255, 255, 0.54) 100%
-  );
-  --nb-glass-border: rgba(255, 255, 255, 0.88);
-  --nb-glass-shadow:
-    0 26px 60px -20px rgba(14, 22, 45, 0.3),
-    0 2px 10px rgba(14, 22, 45, 0.06),
-    inset 0 1px 0 rgba(255, 255, 255, 0.95);
-  --nb-glass-sheen: rgba(255, 255, 255, 0.6);
-
-  --nb-title: #0a1120;
-  --nb-text: #101a2e;
-  --nb-muted: #4a5670;
-  --nb-hairline: rgba(12, 20, 36, 0.1);
-
-  --nb-well: rgba(255, 255, 255, 0.66);
-  --nb-well-border: rgba(12, 20, 36, 0.14);
-  --nb-well-inset: inset 0 1px 0 rgba(255, 255, 255, 0.9);
-  --nb-option: #ffffff;
-
-  /* A pill on a light glass pane has to be tinted away from it, not toward it:
-     white on white is a button nobody sees. */
-  --nb-pill: rgba(15, 23, 42, 0.05);
-  --nb-pill-border: rgba(15, 23, 42, 0.16);
-  --nb-pill-hover: rgba(15, 23, 42, 0.1);
-
-  --nb-link: #0b6fb5;
-  --nb-danger: #b8009c;
-  --nb-mark: linear-gradient(135deg, #1d6fa5 0%, #7b00ff 100%);
+  --nb-ease: cubic-bezier(0.22, 0.61, 0.36, 1);
 }
 
-/* Night. The primary look: deep obsidian, the accents at full strength. */
+/* Light. The page is Apple's off-white, with one soft white highlight at the top
+   so the pane has a light source rather than a flat fill behind it. */
+:root {
+  --nb-page:
+    radial-gradient(120% 70% at 50% -12%, #ffffff 0%, rgba(255, 255, 255, 0) 62%),
+    #f5f5f7;
+
+  --nb-card: rgba(255, 255, 255, 0.72);
+  --nb-card-border: rgba(0, 0, 0, 0.08);
+  --nb-card-shadow:
+    0 18px 44px -18px rgba(0, 0, 0, 0.18),
+    0 1px 2px rgba(0, 0, 0, 0.04);
+  --nb-card-shadow-focus:
+    0 22px 52px -18px rgba(0, 0, 0, 0.2),
+    0 1px 2px rgba(0, 0, 0, 0.04);
+  --nb-card-sheen: rgba(255, 255, 255, 0.9);
+  --nb-hairline: rgba(0, 0, 0, 0.08);
+
+  --nb-title: #1d1d1f;
+  --nb-text: #1d1d1f;
+  --nb-muted: #6e6e73;
+
+  --nb-well: #ffffff;
+  --nb-well-border: rgba(0, 0, 0, 0.12);
+  --nb-well-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.03);
+  --nb-option: #ffffff;
+
+  --nb-control: rgba(0, 0, 0, 0.05);
+  --nb-control-border: rgba(0, 0, 0, 0.1);
+  --nb-control-hover: rgba(0, 0, 0, 0.08);
+
+  --nb-link: #0066cc;
+  --nb-danger: #d70015;
+  --nb-warning: #b25000;
+  --nb-success: #008009;
+  --nb-mark: #1d1d1f;
+}
+
+/* Dark, which on Apple hardware is a near-black surface rather than a coloured
+   one: the pane is the grey sheet that sits on it. */
 html.pf-v5-theme-dark {
   --nb-page:
-    radial-gradient(120% 90% at 8% 4%, rgba(0, 240, 255, 0.14), transparent 55%),
-    radial-gradient(110% 85% at 98% 10%, rgba(240, 0, 255, 0.12), transparent 55%),
-    radial-gradient(130% 100% at 72% 108%, rgba(123, 0, 255, 0.18), transparent 60%),
-    linear-gradient(168deg, #101423 0%, #090a0f 100%);
-  --nb-orb-a: rgba(0, 240, 255, 0.55);
-  --nb-orb-b: rgba(123, 0, 255, 0.5);
-  --nb-orb-c: rgba(240, 0, 255, 0.4);
+    radial-gradient(120% 70% at 50% -12%, #1c1c1e 0%, rgba(28, 28, 30, 0) 62%),
+    #0b0b0c;
 
-  --nb-glass: linear-gradient(
-    155deg,
-    rgba(255, 255, 255, 0.15) 0%,
-    rgba(255, 255, 255, 0.05) 46%,
-    rgba(255, 255, 255, 0.1) 100%
-  );
-  --nb-glass-border: rgba(255, 255, 255, 0.18);
-  --nb-glass-shadow:
-    0 30px 70px -22px rgba(0, 0, 0, 0.8),
-    0 0 0 1px rgba(255, 255, 255, 0.03),
-    inset 0 1px 0 rgba(255, 255, 255, 0.24);
-  --nb-glass-sheen: rgba(255, 255, 255, 0.26);
+  --nb-card: rgba(28, 28, 30, 0.72);
+  --nb-card-border: rgba(255, 255, 255, 0.09);
+  --nb-card-shadow:
+    0 22px 50px -20px rgba(0, 0, 0, 0.9),
+    0 1px 2px rgba(0, 0, 0, 0.5);
+  --nb-card-shadow-focus:
+    0 26px 58px -20px rgba(0, 0, 0, 0.92),
+    0 1px 2px rgba(0, 0, 0, 0.5);
+  --nb-card-sheen: rgba(255, 255, 255, 0.14);
+  --nb-hairline: rgba(255, 255, 255, 0.09);
 
-  --nb-title: #ffffff;
-  --nb-text: #e9f1ff;
-  --nb-muted: #9dabc7;
-  --nb-hairline: rgba(255, 255, 255, 0.1);
+  --nb-title: #f5f5f7;
+  --nb-text: #f5f5f7;
+  --nb-muted: #98989d;
 
-  --nb-well: rgba(255, 255, 255, 0.07);
+  --nb-well: rgba(255, 255, 255, 0.06);
   --nb-well-border: rgba(255, 255, 255, 0.14);
-  --nb-well-inset: inset 0 1px 0 rgba(255, 255, 255, 0.14);
-  --nb-option: #15182a;
+  --nb-well-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.25);
+  --nb-option: #1c1c1e;
 
-  --nb-pill: rgba(255, 255, 255, 0.1);
-  --nb-pill-border: rgba(255, 255, 255, 0.2);
-  --nb-pill-hover: rgba(255, 255, 255, 0.2);
+  --nb-control: rgba(255, 255, 255, 0.08);
+  --nb-control-border: rgba(255, 255, 255, 0.14);
+  --nb-control-hover: rgba(255, 255, 255, 0.13);
 
-  --nb-link: #7df9ff;
-  --nb-danger: #ff6ad5;
-  --nb-mark: linear-gradient(135deg, var(--nb-sky) 0%, var(--nb-violet) 100%);
+  --nb-accent: #0a84ff;
+  --nb-accent-hover: #2b95ff;
+  --nb-accent-press: #0a7cf0;
+  --nb-accent-ring: rgba(10, 132, 255, 0.45);
+
+  --nb-link: #2997ff;
+  --nb-danger: #ff453a;
+  --nb-warning: #ff9f0a;
+  --nb-success: #30d158;
+  --nb-mark: #f5f5f7;
 }
 
 html.login-pf,
@@ -148,157 +140,108 @@ body#keycloak-bg {
 }
 
 /* The page. Painted on <html>, which the browser then washes over the whole
-   canvas: on a short page a rubber-band overscroll shows the same gradient
-   rather than a white edge. The orbs sit under everything and are never
-   interactive; their drift is transform-only, so it stays on the compositor and
-   a login page on a laptop does not turn its fan on. */
+   canvas: on a short page a rubber-band overscroll shows the same fill rather
+   than a white edge. The system stack is set here as the PatternFly font tokens
+   as well, because the engine's components ask for the font by token rather than
+   inheriting it - without that, every heading and button on the page stays in the
+   Red Hat Text the vendor bundle ships. */
 html.login-pf {
+  --pf-v5-global--FontFamily--text: -apple-system, BlinkMacSystemFont, "SF Pro Text",
+    "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --pf-v5-global--FontFamily--heading: var(--pf-v5-global--FontFamily--text);
+  --pf-v5-global--FontFamily--monospace: ui-monospace, SFMono-Regular, "SF Mono", Menlo,
+    Consolas, monospace;
+
   background: var(--nb-page);
   background-attachment: fixed;
+  font-family: var(--pf-v5-global--FontFamily--text);
+  -webkit-font-smoothing: antialiased;
 }
 
 body#keycloak-bg {
   /* The engine's sheet paints its own artwork here (--keycloak-bg-logo-url). The
-     page background is the gradient on <html> now, so this is cleared rather than
+     page background is the fill on <html> now, so this is cleared rather than
      replaced - two opaque backgrounds stacked is how a theme ends up showing the
      vendor's picture behind its own. */
   background: none;
   color: var(--nb-text);
+  font-family: inherit;
   overflow-x: hidden;
 }
 
-html.login-pf::before,
-body#keycloak-bg::before,
-body#keycloak-bg::after {
-  content: "";
-  position: fixed;
-  z-index: 0;
-  pointer-events: none;
-  border-radius: 50%;
-  background-repeat: no-repeat;
+/* Form controls do not inherit the font from their parent unless they are told
+   to, and a sign-in page is mostly form controls. */
+.pf-v5-c-button,
+.pf-v5-c-form-control > input,
+.pf-v5-c-form-control > select,
+.pf-v5-c-form-control > textarea {
+  font-family: inherit;
 }
 
-html.login-pf::before {
-  width: 44vmax;
-  height: 44vmax;
-  top: -14vmax;
-  left: -12vmax;
-  background-image: radial-gradient(circle at 50% 50%, var(--nb-orb-a), transparent 68%);
-  animation: nb-drift-a 34s var(--nb-ease) infinite;
-}
-
-body#keycloak-bg::before {
-  width: 52vmax;
-  height: 52vmax;
-  right: -16vmax;
-  bottom: -18vmax;
-  background-image: radial-gradient(circle at 50% 50%, var(--nb-orb-b), transparent 68%);
-  animation: nb-drift-b 42s var(--nb-ease) infinite;
-}
-
-body#keycloak-bg::after {
-  width: 34vmax;
-  height: 34vmax;
-  top: 42%;
-  right: 12%;
-  background-image: radial-gradient(circle at 50% 50%, var(--nb-orb-c), transparent 70%);
-  animation: nb-drift-c 38s var(--nb-ease) infinite;
-}
-
-@keyframes nb-drift-a {
-  0%,
-  100% {
-    transform: translate3d(0, 0, 0) scale(1);
-  }
-  50% {
-    transform: translate3d(5vmax, 4vmax, 0) scale(1.1);
-  }
-}
-
-@keyframes nb-drift-b {
-  0%,
-  100% {
-    transform: translate3d(0, 0, 0) scale(1.05);
-  }
-  50% {
-    transform: translate3d(-6vmax, -3vmax, 0) scale(1);
-  }
-}
-
-@keyframes nb-drift-c {
-  0%,
-  100% {
-    transform: translate3d(0, 0, 0);
-  }
-  50% {
-    transform: translate3d(-4vmax, 5vmax, 0);
-  }
-}
-
-/* The login column, above the orbs. PatternFly centres a 34rem column; written
-   as min() so a phone gets the viewport instead of a horizontal scrollbar. */
+/* The login column. PatternFly centres a 34rem column; written as min() so a
+   phone gets the viewport instead of a horizontal scrollbar, and on a desktop a
+   sign-in card wants a little less width than that. */
 .pf-v5-c-login {
-  position: relative;
-  z-index: 1;
   background: transparent;
-  padding: clamp(1.25rem, 4vw, 3rem) clamp(1rem, 4vw, 2rem);
+  padding: clamp(1.5rem, 4vw, 3.5rem) clamp(1.25rem, 4vw, 2rem);
 }
 
 .pf-v5-c-login__container {
-  grid-template-columns: min(34rem, 100%);
+  grid-template-columns: min(30rem, 100%);
 }
 
 /* The brand: the realm's name - which is what `loginTitleHtml` renders here, not
    a logo element - set beside the mark from the theme's resources. The mark is a
-   mask rather than an image, so one file serves both themes: the shape comes from
-   the SVG, the colour from --nb-mark. */
+   mask rather than an image, so one file serves both themes and takes --nb-mark,
+   which is plain ink in both: a coloured logo mark is the first thing that stops
+   looking like Apple. */
 #kc-header-wrapper {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 0.85rem;
-  margin: 0 0 clamp(1.25rem, 3vw, 2rem);
-  font-size: clamp(1.4rem, 1.1rem + 1.4vw, 1.9rem);
+  gap: 0.65rem;
+  margin: 0 0 clamp(1.5rem, 3vw, 2.25rem);
+  font-size: 1.5rem;
   font-weight: 600;
-  letter-spacing: 0.22em;
+  letter-spacing: -0.01em;
   line-height: 1.2;
-  text-transform: uppercase;
-  text-shadow: 0 2px 18px rgba(0, 240, 255, 0.25);
+  /* The parent sheet uppercases and letter-spaces this element; a wordmark that
+     is shouted is the opposite of the register this theme is in. */
+  text-transform: none;
   /* The parent sheet declares this colour with !important; the same selector
      later in the cascade is what beats it. */
   color: var(--nb-title) !important;
-  animation: nb-rise 0.55s var(--nb-ease) both;
+  animation: nb-rise 0.45s var(--nb-ease) both;
 }
 
 #kc-header-wrapper::before {
   content: "";
-  width: 46px;
-  height: 46px;
+  width: 36px;
+  height: 36px;
   flex: none;
   background: var(--nb-mark);
   -webkit-mask: url("../img/nebula-mark.svg") center / contain no-repeat;
   mask: url("../img/nebula-mark.svg") center / contain no-repeat;
-  filter: drop-shadow(0 6px 16px rgba(0, 240, 255, 0.35));
 }
 
-/* The glass pane. */
+/* The pane. Apple's translucent sheet: a blur that is felt rather than noticed,
+   a hairline, a soft shadow, and one faint sheen along the top edge that implies
+   the light source. No colour in any of it. */
 .pf-v5-c-login__main {
   position: relative;
   isolation: isolate;
-  background: var(--nb-glass);
-  border: 1px solid var(--nb-glass-border);
-  border-radius: var(--nb-radius-pane);
-  box-shadow: var(--nb-glass-shadow);
-  backdrop-filter: blur(26px) saturate(180%);
-  -webkit-backdrop-filter: blur(26px) saturate(180%);
+  background: var(--nb-card);
+  border: 1px solid var(--nb-card-border);
+  border-radius: var(--nb-radius-card);
+  box-shadow: var(--nb-card-shadow);
+  backdrop-filter: blur(30px) saturate(180%);
+  -webkit-backdrop-filter: blur(30px) saturate(180%);
   /* No overflow:hidden - the pane has to let the "restart sign-in" tooltip hang
      past its edge - so the sheen below rounds itself instead. */
-  transition: box-shadow 0.4s var(--nb-ease);
-  animation: nb-rise 0.6s var(--nb-ease) 0.05s both;
+  transition: box-shadow 0.25s var(--nb-ease);
+  animation: nb-rise 0.45s var(--nb-ease) 0.04s both;
 }
 
-/* The diagonal sheen that tells a glass pane from a grey box. Opacity only, and
-   it follows the pane's own corner radius because the pane does not clip. */
 .pf-v5-c-login__main::before {
   content: "";
   position: absolute;
@@ -307,27 +250,18 @@ body#keycloak-bg::after {
   pointer-events: none;
   border-radius: inherit;
   background: linear-gradient(
-    148deg,
-    var(--nb-glass-sheen) 0%,
-    transparent 38%,
-    transparent 62%,
-    color-mix(in srgb, var(--nb-glass-sheen) 40%, transparent) 100%
+    180deg,
+    var(--nb-card-sheen) 0%,
+    rgba(255, 255, 255, 0) 42%
   );
-  opacity: 0.75;
-  transition: opacity 0.4s var(--nb-ease);
+  opacity: 0.5;
 }
 
-.pf-v5-c-login__main:hover::before {
-  opacity: 1;
-}
-
-/* Focus anywhere in the form lights the pane's edge, which is the one piece of
-   motion here that is also information: this pane is the thing you are filling. */
+/* The pane does not light up: a control that has focus already shows a ring, and
+   a second ring around the whole card reads as a browser outline rather than as
+   polish. The pane only lifts a little while it is in use. */
 .pf-v5-c-login__main:focus-within {
-  box-shadow:
-    var(--nb-glass-shadow),
-    0 0 0 1px rgba(0, 240, 255, 0.45),
-    0 0 56px -14px rgba(0, 240, 255, 0.5);
+  box-shadow: var(--nb-card-shadow-focus);
 }
 
 .pf-v5-c-login__main-header,
@@ -337,26 +271,26 @@ body#keycloak-bg::after {
   z-index: 1;
 }
 
-/* The engine draws a 4px top bar here; the pane's own border is the edge now. */
+/* The engine draws a 4px top bar here; the pane's own hairline is the edge now. */
 .pf-v5-c-login__main-header {
   border-top: 0 none;
-  padding-block: clamp(1.5rem, 3.5vw, 2rem) 0.75rem;
-  animation: nb-rise 0.6s var(--nb-ease) 0.1s both;
+  padding-block: clamp(1.75rem, 3.5vw, 2.25rem) 0.5rem;
+  animation: nb-rise 0.45s var(--nb-ease) 0.08s both;
 }
 
 .pf-v5-c-login__main-body {
-  animation: nb-rise 0.6s var(--nb-ease) 0.15s both;
+  animation: nb-rise 0.45s var(--nb-ease) 0.12s both;
 }
 
 .pf-v5-c-login__main-footer {
-  animation: nb-rise 0.6s var(--nb-ease) 0.2s both;
+  animation: nb-rise 0.45s var(--nb-ease) 0.16s both;
 }
 
 #kc-page-title,
 .pf-v5-c-title {
   color: var(--nb-title);
-  font-weight: 650;
-  letter-spacing: -0.01em;
+  font-weight: 600;
+  letter-spacing: -0.02em;
 }
 
 .pf-v5-c-login__main-footer-band {
@@ -369,13 +303,15 @@ body#keycloak-bg::after {
   color: var(--nb-muted);
 }
 
-/* Form text. */
+/* Form text: a 13px label in the secondary grey above the field, the value in
+   the ink colour, the help text below. */
 .pf-v5-c-form__label,
 .pf-v5-c-form__label-text,
 .pf-v5-c-form__group-label {
-  color: var(--nb-text);
-  font-weight: 550;
-  letter-spacing: 0.01em;
+  color: var(--nb-muted);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  letter-spacing: 0;
 }
 
 .pf-v5-c-form__label-required {
@@ -386,20 +322,20 @@ body#keycloak-bg::after {
 .pf-v5-c-helper-text__item-text,
 .pf-v5-c-form__helper-text {
   color: var(--nb-muted);
+  font-size: 0.8125rem;
 }
 
 /* Wells: everything the engine wraps in .pf-v5-c-form-control - the text inputs,
-   the password input, the language select - becomes glass on glass. */
+   the password input, the language select - is one of these. */
 .pf-v5-c-form-control {
   background: var(--nb-well);
   border: 1px solid var(--nb-well-border);
-  border-radius: var(--nb-radius-well);
-  box-shadow: var(--nb-well-inset);
+  border-radius: var(--nb-radius-control);
+  box-shadow: var(--nb-well-shadow);
   color: var(--nb-text);
   transition:
-    border-color 0.25s var(--nb-ease),
-    box-shadow 0.25s var(--nb-ease),
-    background-color 0.25s var(--nb-ease);
+    border-color 0.18s var(--nb-ease),
+    box-shadow 0.18s var(--nb-ease);
 }
 
 /* PatternFly draws the control's underline and its focus accent with ::before and
@@ -415,12 +351,13 @@ body#keycloak-bg::after {
   background: transparent;
   border: 0;
   color: inherit;
+  font-size: 1rem;
 }
 
 /* The element inside the well is square and borderless, so the browser's own
-   focus ring would draw a hard rectangle inside the rounded glass. Focus is shown
-   by the well around it instead (below), which is the same information on a
-   shape that belongs to this theme. */
+   focus ring would draw a hard rectangle inside the rounded control. Focus is
+   shown by the well around it instead, which is the same information on a shape
+   that belongs to this theme. */
 .pf-v5-c-form-control > input:focus,
 .pf-v5-c-form-control > select:focus,
 .pf-v5-c-form-control > textarea:focus {
@@ -430,22 +367,26 @@ body#keycloak-bg::after {
 .pf-v5-c-form-control > input::placeholder,
 .pf-v5-c-form-control > textarea::placeholder {
   color: var(--nb-muted);
-  opacity: 0.8;
 }
 
 .pf-v5-c-form-control:focus-within {
-  border-color: rgba(0, 240, 255, 0.55);
-  box-shadow:
-    0 0 0 3px rgba(0, 240, 255, 0.18),
-    var(--nb-well-inset);
+  border-color: var(--nb-accent);
+  box-shadow: 0 0 0 4px var(--nb-accent-ring);
 }
 
 .pf-v5-c-form-control.pf-m-error,
 .pf-v5-c-form-control.pf-m-error:focus-within {
-  border-color: rgba(240, 0, 255, 0.55);
-  box-shadow:
-    0 0 0 3px rgba(240, 0, 255, 0.16),
-    var(--nb-well-inset);
+  border-color: var(--nb-danger);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--nb-danger) 25%, transparent);
+}
+
+/* color-mix is recent; where it is missing the ring above is simply absent, and
+   the red border still marks the field. */
+@supports not (color: color-mix(in srgb, red 50%, transparent)) {
+  .pf-v5-c-form-control.pf-m-error,
+  .pf-v5-c-form-control.pf-m-error:focus-within {
+    box-shadow: var(--nb-well-shadow);
+  }
 }
 
 .pf-v5-c-helper-text__item.pf-m-error .pf-v5-c-helper-text__item-text,
@@ -471,137 +412,118 @@ body#keycloak-bg::after {
   background-color: var(--nb-option);
 }
 
-/* Buttons. Primary is a neon cyan gradient with obsidian type: the gradient stays
-   in the light half on purpose, because white on cyan or on violet is unreadable
-   and the vibrant end of the palette belongs in the glow around the button rather
-   than under its label. */
+/* Buttons. The primary action is the system blue with white type and a 12px
+   radius - the one saturated surface on the page, which is what makes it read as
+   the primary action. */
 .pf-v5-c-button.pf-m-primary {
-  position: relative;
-  overflow: hidden;
-  background: linear-gradient(135deg, #cdfbff 0%, #22e6ff 45%, #00b8ff 100%);
+  background: var(--nb-accent);
   border: 0;
-  border-radius: var(--nb-radius-pill);
-  color: #05121c;
-  font-weight: 650;
-  letter-spacing: 0.01em;
-  padding-block: 0.8rem;
-  box-shadow:
-    0 12px 30px -12px rgba(0, 240, 255, 0.65),
-    inset 0 1px 0 rgba(255, 255, 255, 0.6);
+  border-radius: var(--nb-radius-control);
+  color: #ffffff;
+  font-size: 1rem;
+  font-weight: 500;
+  letter-spacing: 0;
+  padding-block: 0.75rem;
   transition:
-    transform 0.25s var(--nb-ease),
-    box-shadow 0.25s var(--nb-ease),
-    filter 0.25s var(--nb-ease);
-}
-
-.pf-v5-c-button.pf-m-primary::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.55), transparent);
-  transform: translateX(-130%) skewX(-18deg);
-  transition: transform 0.75s var(--nb-ease);
+    background-color 0.18s var(--nb-ease),
+    transform 0.12s var(--nb-ease);
 }
 
 .pf-v5-c-button.pf-m-primary:hover {
-  transform: translateY(-1px) scale(1.01);
-  filter: brightness(1.06);
-  box-shadow:
-    0 18px 40px -14px rgba(0, 240, 255, 0.8),
-    0 0 34px -12px rgba(123, 0, 255, 0.7),
-    inset 0 1px 0 rgba(255, 255, 255, 0.7);
-}
-
-.pf-v5-c-button.pf-m-primary:hover::after {
-  transform: translateX(130%) skewX(-18deg);
+  background: var(--nb-accent-hover);
 }
 
 .pf-v5-c-button.pf-m-primary:active {
-  transform: translateY(0) scale(0.98);
+  background: var(--nb-accent-press);
+  transform: scale(0.985);
 }
 
 /* Secondary and link buttons - "back to login", the social providers, the
-   password reveal inside the well - are the glass pill from the design system. */
+   password reveal inside the well - are the quiet grey fill, never a second
+   colour. */
 .pf-v5-c-button.pf-m-secondary,
 .pf-v5-c-button.pf-m-tertiary {
-  background: var(--nb-pill);
-  border: 1px solid var(--nb-pill-border);
-  border-radius: var(--nb-radius-pill);
+  background: var(--nb-control);
+  border: 1px solid var(--nb-control-border);
+  border-radius: var(--nb-radius-control);
   color: var(--nb-text);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+  font-weight: 500;
   transition:
-    background-color 0.25s var(--nb-ease),
-    border-color 0.25s var(--nb-ease),
-    box-shadow 0.25s var(--nb-ease),
-    transform 0.25s var(--nb-ease);
+    background-color 0.18s var(--nb-ease),
+    border-color 0.18s var(--nb-ease);
 }
 
 .pf-v5-c-button.pf-m-secondary:hover,
 .pf-v5-c-button.pf-m-tertiary:hover {
-  background: var(--nb-pill-hover);
-  border-color: rgba(0, 240, 255, 0.5);
-  box-shadow: 0 0 24px -8px rgba(0, 240, 255, 0.55);
-  transform: translateY(-1px);
+  background: var(--nb-control-hover);
 }
 
 .pf-v5-c-button.pf-m-secondary:active,
 .pf-v5-c-button.pf-m-tertiary:active {
-  transform: translateY(0) scale(0.98);
+  transform: scale(0.985);
 }
 
 .pf-v5-c-button.pf-m-link,
 .pf-v5-c-button.pf-m-control {
   background: transparent;
   border: 0;
-  border-radius: 12px;
+  border-radius: var(--nb-radius-control);
   color: var(--nb-link);
 }
 
 .pf-v5-c-button.pf-m-control:hover {
-  background: var(--nb-pill);
+  background: var(--nb-control);
   color: var(--nb-link);
 }
 
+/* PatternFly underlines a control button that sits in an input group - the
+   password reveal, the clipboard buttons - by drawing a border on the button's
+   own ::after, which is why the well's edge seemed to carry on past it. The wells
+   here carry their own edges. */
+.pf-v5-c-button.pf-m-control::before,
+.pf-v5-c-button.pf-m-control::after {
+  border: 0 none;
+}
+
 .pf-v5-c-button:focus-visible {
-  outline: 2px solid var(--nb-cyan);
-  outline-offset: 3px;
+  outline: none;
+  box-shadow: 0 0 0 4px var(--nb-accent-ring);
 }
 
 /* Links, including "forgot password" and "register". */
 a,
 .pf-v5-c-button.pf-m-link {
   color: var(--nb-link);
-  text-decoration-color: color-mix(in srgb, var(--nb-link) 45%, transparent);
-  text-underline-offset: 0.2em;
-  transition:
-    color 0.2s var(--nb-ease),
-    text-decoration-color 0.2s var(--nb-ease);
+  text-decoration: none;
+  transition: text-decoration-color 0.18s var(--nb-ease);
 }
 
 a:hover {
-  color: var(--nb-title);
-  text-decoration-color: currentColor;
+  text-decoration: underline;
 }
 
-/* Feedback, in the palette's magenta rather than a generic red. */
+/* Feedback, in the semantic colours only. */
 .pf-v5-c-alert {
-  border: 1px solid var(--nb-glass-border);
-  border-radius: 18px;
-  background: var(--nb-well);
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
-  box-shadow: var(--nb-well-inset);
+  border: 1px solid var(--nb-card-border);
+  border-radius: var(--nb-radius-control);
+  background: var(--nb-control);
+  box-shadow: none;
 }
 
 .pf-v5-c-alert.pf-m-danger,
 .pf-v5-c-alert.pf-m-error {
-  border-color: rgba(240, 0, 255, 0.45);
-  background: linear-gradient(120deg, rgba(240, 0, 255, 0.16), rgba(123, 0, 255, 0.1));
-  box-shadow:
-    0 0 30px -14px rgba(240, 0, 255, 0.7),
-    var(--nb-well-inset);
+  border-color: color-mix(in srgb, var(--nb-danger) 40%, transparent);
+  background: color-mix(in srgb, var(--nb-danger) 10%, transparent);
+}
+
+.pf-v5-c-alert.pf-m-warning {
+  border-color: color-mix(in srgb, var(--nb-warning) 40%, transparent);
+  background: color-mix(in srgb, var(--nb-warning) 12%, transparent);
+}
+
+.pf-v5-c-alert.pf-m-success {
+  border-color: color-mix(in srgb, var(--nb-success) 35%, transparent);
+  background: color-mix(in srgb, var(--nb-success) 12%, transparent);
 }
 
 .pf-v5-c-alert.pf-m-danger .pf-v5-c-alert__icon,
@@ -609,26 +531,13 @@ a:hover {
   color: var(--nb-danger);
 }
 
-.pf-v5-c-alert.pf-m-warning {
-  border-color: rgba(255, 176, 0, 0.4);
-  background: linear-gradient(120deg, rgba(255, 176, 0, 0.14), rgba(240, 0, 255, 0.08));
+.pf-v5-c-alert.pf-m-warning .pf-v5-c-alert__icon {
+  color: var(--nb-warning);
 }
 
-.pf-v5-c-alert.pf-m-success {
-  border-color: rgba(0, 240, 255, 0.4);
-  background: linear-gradient(120deg, rgba(0, 240, 255, 0.14), rgba(0, 140, 255, 0.1));
-}
-
-/* PatternFly paints a green tick and a blue info mark; the palette's own two
-   hues read better on the glass, and --nb-link is already the colour that has to
-   be legible on both the light and the dark pane. */
 .pf-v5-c-alert.pf-m-success .pf-v5-c-alert__icon,
 .pf-v5-c-alert.pf-m-info .pf-v5-c-alert__icon {
   color: var(--nb-link);
-}
-
-.pf-v5-c-alert.pf-m-warning .pf-v5-c-alert__icon {
-  color: #ffb000;
 }
 
 .pf-v5-c-alert__title,
@@ -638,49 +547,42 @@ a:hover {
 
 /* PatternFly separates a grouped control from the button beside it (the password
    reveal) with a grey rule, and that rule hangs off the well's own rounded edge
-   as a stray line once the well is glass. The wells carry their own edges. */
+   as a stray line once the well is one of ours. The wells carry their own edges. */
 .pf-v5-c-input-group,
 .pf-v5-c-input-group__item {
   border: 0 none;
   background: transparent;
 }
 
-/* The checkbox is a well too: appearance:none to take it out of the platform's
-   hands, then the same fill, edge and cyan checked state as everything else. The
-   tick is an inline SVG so no other file is needed and no font is relied on. */
+/* The checkbox follows the platform's own look closely, so it is drawn here:
+   a 18px rounded square that fills with the accent and a white tick. */
 .pf-v5-c-check__input {
   appearance: none;
   -webkit-appearance: none;
-  width: 1.1rem;
-  height: 1.1rem;
+  width: 1.125rem;
+  height: 1.125rem;
   border: 1px solid var(--nb-well-border);
-  border-radius: 6px;
+  border-radius: 5px;
   background: var(--nb-well);
-  box-shadow: var(--nb-well-inset);
+  box-shadow: var(--nb-well-shadow);
   cursor: pointer;
   transition:
-    border-color 0.2s var(--nb-ease),
-    box-shadow 0.2s var(--nb-ease),
-    background-color 0.2s var(--nb-ease);
-}
-
-.pf-v5-c-check__input:hover {
-  border-color: rgba(0, 240, 255, 0.5);
+    background-color 0.18s var(--nb-ease),
+    border-color 0.18s var(--nb-ease);
 }
 
 .pf-v5-c-check__input:checked {
   border-color: transparent;
-  background-color: #22e6ff;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none' stroke='%2305121c' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4.5 10.5l3.5 3.5 7.5-8'/%3E%3C/svg%3E");
+  background-color: var(--nb-accent);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none' stroke='%23ffffff' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4.5 10.5l3.5 3.5 7.5-8'/%3E%3C/svg%3E");
   background-repeat: no-repeat;
   background-position: center;
   background-size: 88%;
-  box-shadow: 0 0 18px -4px rgba(0, 240, 255, 0.7);
 }
 
 .pf-v5-c-check__input:focus-visible {
-  outline: 2px solid var(--nb-cyan);
-  outline-offset: 2px;
+  outline: none;
+  box-shadow: 0 0 0 4px var(--nb-accent-ring);
 }
 
 .pf-v5-c-check__label {
@@ -690,36 +592,31 @@ a:hover {
 
 /* Tiles, panels, data lists, the clipboard and the recovery-code panes: the pages
    past the first one (OTP, WebAuthn, register, terms) are built from these, and
-   they would otherwise stay PatternFly white on the obsidian page. */
+   they would otherwise stay PatternFly white on a dark page. */
 .pf-v5-c-tile,
 .pf-v5-c-panel.pf-m-raised,
 .pf-v5-c-data-list__item {
-  border-color: var(--nb-well-border);
-  background: var(--nb-well);
+  border-color: var(--nb-card-border);
+  background: var(--nb-control);
   color: var(--nb-text);
 }
 
 .pf-v5-c-tile,
 .pf-v5-c-panel.pf-m-raised {
-  border-radius: var(--nb-radius-well);
+  border-radius: var(--nb-radius-control);
 }
 
-.pf-v5-c-tile.pf-m-selected {
-  border-color: rgba(0, 240, 255, 0.6);
-  box-shadow: 0 0 26px -10px rgba(0, 240, 255, 0.7);
-}
-
+.pf-v5-c-tile.pf-m-selected,
 .pf-v5-c-data-list__item.pf-m-clickable:hover,
 .pf-v5-c-data-list__item.pf-m-clickable:focus-within {
-  border-color: rgba(0, 240, 255, 0.5);
-  box-shadow: 0 0 26px -12px rgba(0, 240, 255, 0.6);
+  border-color: var(--nb-accent);
 }
 
 .pf-v5-c-clipboard-copy__expandable-content,
 .pf-v5-c-clipboard-copy pre,
 #kc-recovery-codes-list {
-  background: var(--nb-well);
-  border-radius: var(--nb-radius-well);
+  background: var(--nb-control);
+  border-radius: var(--nb-radius-control);
   color: var(--nb-text);
 }
 
@@ -730,12 +627,12 @@ a:hover {
   color: var(--nb-text);
 }
 
-/* The intro. Header, pane and the three bands of the pane come up in the 0.05s
-   steps the design system asks for, once, on load. */
+/* The intro: 8px of travel and no scale, on the 0.04s steps the design system
+   asks for, once, on load. */
 @keyframes nb-rise {
   from {
     opacity: 0;
-    transform: translateY(16px) scale(0.99);
+    transform: translateY(8px);
   }
   to {
     opacity: 1;
@@ -747,20 +644,15 @@ a:hover {
    page; these fills are opaque enough to stay legible without the blur. */
 @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
   :root {
-    --nb-glass: linear-gradient(155deg, rgba(244, 248, 255, 0.96), rgba(232, 238, 250, 0.94));
-    --nb-well: rgba(255, 255, 255, 0.85);
+    --nb-card: #ffffff;
   }
 
   html.pf-v5-theme-dark {
-    --nb-glass: linear-gradient(155deg, rgba(24, 27, 42, 0.97), rgba(13, 15, 24, 0.97));
-    --nb-well: rgba(255, 255, 255, 0.09);
+    --nb-card: #1c1c1e;
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  html.login-pf::before,
-  body#keycloak-bg::before,
-  body#keycloak-bg::after,
   #kc-header-wrapper,
   .pf-v5-c-login__main,
   .pf-v5-c-login__main-header,
@@ -769,20 +661,16 @@ a:hover {
     animation: none;
   }
 
-  .pf-v5-c-button.pf-m-primary,
-  .pf-v5-c-button.pf-m-primary::after,
-  .pf-v5-c-button.pf-m-secondary,
-  .pf-v5-c-button.pf-m-tertiary,
-  .pf-v5-c-login__main,
-  .pf-v5-c-login__main::before,
-  a {
+  .pf-v5-c-button,
+  .pf-v5-c-form-control,
+  .pf-v5-c-check__input,
+  .pf-v5-c-login__main {
     transition: none;
   }
 
-  .pf-v5-c-button.pf-m-primary:hover,
   .pf-v5-c-button.pf-m-primary:active,
-  .pf-v5-c-button.pf-m-secondary:hover,
-  .pf-v5-c-button.pf-m-tertiary:hover {
+  .pf-v5-c-button.pf-m-secondary:active,
+  .pf-v5-c-button.pf-m-tertiary:active {
     transform: none;
   }
 }

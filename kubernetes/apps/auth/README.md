@@ -114,10 +114,11 @@ because a ConfigMap is flat and a theme is a directory tree.
 
 Nothing about a page's markup is copied. The theme declares `parent=keycloak.v2`
 and so inherits every template from the theme Keycloak ships, then paints over
-PatternFly 5 in CSS: the glass pane, the drifting colour orbs and the light/dark
-pair are all in `theme/nebula/login/resources/css/nebula.css`, whose header says
-what the design is and why a Keycloak theme implements it in CSS rather than in
-the React the design was written for. The one non-obvious dependency is
+PatternFly 5 in CSS. The look is Apple's - one system-blue accent, system
+typography, translucent materials used quietly, short eased transitions, no
+JavaScript - and `theme/nebula/login/resources/css/nebula.css` opens with what
+that means rule by rule and why a Keycloak theme implements it in CSS rather than
+in the React the design was written for. The one non-obvious dependency is
 `styles=css/styles.css css/nebula.css` in `theme.properties`: a child theme's
 `styles` replaces the parent's list rather than adding to it, so the parent's own
 layout sheet is named again to keep it.
