@@ -1,0 +1,6 @@
+<!-- The nebula mark, the same drawing the forge and the landing pages carry
+     (kubernetes/apps/services/forgejo/base/theme/). Login is the one page a
+     person sees before the cluster, so it is the same mark here, used as a
+     mask in nebula.css: the shape comes from this file, the colour from the
+     theme, which is what lets one file be cyan on obsidian and blue on light. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 212 212" width="32" height="32"><g transform="translate(6 6)" fill="none"><path d="M58 168V70a50 50 0 0 1 50-50h20" stroke="#8ec8e8" stroke-width="25"/><path d="M58 168v-30a50 50 0 0 1 50-50h20" stroke="#f4fbff" stroke-width="25"/><circle cx="142" cy="20" r="18" stroke="#8ec8e8" stroke-width="15"/><circle cx="142" cy="88" r="18" stroke="#f4fbff" stroke-width="15"/><circle cx="58" cy="180" r="18" stroke="#f4fbff" stroke-width="15"/></g></svg>

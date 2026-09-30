@@ -49,7 +49,7 @@ clients and its users exist only in Keycloak's database. What is hand-made:
 
 | Object | Where its value comes from |
 | --- | --- |
-| The realm `nebula` | settings only - `sslRequired: external`, the default token lifetimes, no self-registration - so a rebuild is one API call |
+| The realm `nebula` | settings only - `sslRequired: external`, `loginTheme: nebula`, the default token lifetimes, no self-registration - so a rebuild is one API call |
 | The client `webui` (confidential) | the secret is `client-secret` in the `keycloak-webui-oauth` Secret |
 | The client `forgejo` (confidential) | the secret is `FORGEJO_OAUTH_CLIENT_SECRET` in `cluster-secrets`, so git holds it, encrypted |
 | The users | created in the console; a realm created this way starts empty |
@@ -65,6 +65,7 @@ curl -sS -X POST -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application
 {
   "realm": "nebula",
   "displayName": "Nebula",
+  "loginTheme": "nebula",
   "sslRequired": "external",
   "clients": [
     {
@@ -101,6 +102,55 @@ curl -sS -X DELETE -H "Authorization: Bearer $TOKEN" \
 
 `master` cannot be deleted, which is the point of keeping administration there: it
 is the way back in.
+
+## The sign-in theme
+
+The pages a person signs in on are themed from git.
+`kubernetes/apps/auth/keycloak/base/theme/nebula/` holds a `theme.properties` and
+one stylesheet; `base/kustomization.yaml` turns that directory into the
+`keycloak-theme` ConfigMap, and the HelmRelease mounts its files one at a time onto
+the paths Keycloak reads a theme from - `/opt/keycloak/themes/nebula/login/...` -
+because a ConfigMap is flat and a theme is a directory tree.
+
+Nothing about a page's markup is copied. The theme declares `parent=keycloak.v2`
+and so inherits every template from the theme Keycloak ships, then paints over
+PatternFly 5 in CSS: the glass pane, the drifting colour orbs and the light/dark
+pair are all in `theme/nebula/login/resources/css/nebula.css`, whose header says
+what the design is and why a Keycloak theme implements it in CSS rather than in
+the React the design was written for. The one non-obvious dependency is
+`styles=css/styles.css css/nebula.css` in `theme.properties`: a child theme's
+`styles` replaces the parent's list rather than adding to it, so the parent's own
+layout sheet is named again to keep it.
+
+What stays hand-made is the single word that selects the theme, because a realm
+that has never been told otherwise uses the bundled one. It is part of the realm
+and `loginTheme` is set with everything else when the realm is created (above);
+for a realm that already exists:
+
+```bash
+# $TOKEN as above.
+curl -sS -H "Authorization: Bearer $TOKEN" \
+  "https://keycloak.${SECRET_DOMAIN_0}/admin/realms/nebula" |
+  jq '.loginTheme = "nebula"' |
+  curl -sS -X PUT -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+    "https://keycloak.${SECRET_DOMAIN_0}/admin/realms/nebula" -d @-
+```
+
+The realm is read back and one field changed rather than sending the field alone:
+a `PUT` to a realm replaces the whole representation, so a partial body would
+silently reset the clients and the token lifetimes.
+
+Editing the theme is then one step on top of the push, because two caches hold it:
+the kubelet does not refresh `subPath` mounts under a running pod, and a server
+started in production caches theme files in memory.
+
+```bash
+kubectl -n auth rollout restart deploy/keycloak
+```
+
+That is the whole loop - a stylesheet change, a push, and that restart. Light and
+dark are not two themes: the colour set is chosen by the class Keycloak's own
+script puts on `<html>` from `prefers-color-scheme`.
 
 ## Moving to another realm is a cutover, not a rename
 

@@ -96,3 +96,26 @@ spec:
         ports:
           http:
             port: 8080
+    persistence:
+      # The sign-in theme. Keycloak reads a theme from disk as a directory tree -
+      # login/theme.properties, with the stylesheet and images under
+      # login/resources/ - and a ConfigMap is flat, so its three files are mounted
+      # one at a time onto the paths that tree needs. Mounting the ConfigMap whole
+      # would flatten this into a directory of three loose files, and a subPath
+      # mount of the theme directory would hide the rest of /opt/keycloak/themes.
+      #
+      # The theme is inert until a realm names it (`loginTheme: nebula`); that
+      # setting is hand-made with the rest of the realm - see README.md.
+      theme:
+        type: configMap
+        name: keycloak-theme
+        globalMounts:
+          - path: /opt/keycloak/themes/nebula/login/theme.properties
+            subPath: theme.properties
+            readOnly: true
+          - path: /opt/keycloak/themes/nebula/login/resources/css/nebula.css
+            subPath: nebula.css
+            readOnly: true
+          - path: /opt/keycloak/themes/nebula/login/resources/img/nebula-mark.svg
+            subPath: nebula-mark.svg
+            readOnly: true

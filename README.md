@@ -331,6 +331,17 @@ kubectl -n services rollout status deploy/forgejo --timeout=180s
   application. Those mounts are `subPath`, which the kubelet does not refresh under
   a running pod: after a theme change,
   `kubectl -n services rollout restart deploy/forgejo`.
+- **The sign-in pages are themed from git as well.**
+  `kubernetes/apps/auth/keycloak/base/theme/` holds a `theme.properties` and one
+  stylesheet, shipped as the `keycloak-theme` ConfigMap and mounted file by file
+  under `/opt/keycloak/themes/nebula/`, for the same reason as the forge's: a
+  ConfigMap is flat and a theme is a directory tree. The theme inherits Keycloak's
+  own templates and only paints over them, so an upgrade moves the markup under it
+  and the pages stay themed. Which theme a realm uses is a realm setting -
+  `loginTheme: nebula`, hand-made with the rest of realm `nebula`, see
+  `kubernetes/apps/auth/README.md`. A production server caches theme files on top
+  of the `subPath` rule, so after a theme change,
+  `kubectl -n auth rollout restart deploy/keycloak`.
 - **Restore an individual app from git:**
 
   ```bash

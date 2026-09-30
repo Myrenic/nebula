@@ -5,3 +5,25 @@ resources:
   - ./helmrelease.yaml
   - ./ocirepository.yaml
   - ./postgres-helmrelease.yaml
+configMapGenerator:
+  # Keycloak reads themes from its filesystem - themes/<name>/<login|account|admin>/
+  # theme.properties, with the stylesheet and images beside it under resources/ -
+  # so the sign-in theme ships as a ConfigMap that the HelmRelease mounts into
+  # those paths. Files rather than a ConfigMap written out by hand, because these
+  # are source files: a properties file, a stylesheet and an SVG.
+  - name: keycloak-theme
+    files:
+      - theme/nebula/login/theme.properties
+      - theme/nebula/login/resources/css/nebula.css
+      - theme/nebula/login/resources/img/nebula-mark.svg
+generatorOptions:
+  # The generator would otherwise suffix the name with a content hash, and
+  # kustomize only rewrites that suffix in the fields it knows - which does not
+  # include a HelmRelease's values, where the mounts are declared. With the hash
+  # on, the release would keep mounting the unsuffixed ConfigMap that Flux prunes.
+  # Off, the name is stable; a theme change is then applied by
+  # `kubectl -n auth rollout restart deploy/keycloak`, because these are subPath
+  # mounts and the kubelet does not refresh those under a running pod.
+  disableNameSuffixHash: true
+  labels:
+    app.kubernetes.io/name: keycloak
