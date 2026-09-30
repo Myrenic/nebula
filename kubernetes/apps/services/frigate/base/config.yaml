@@ -10,7 +10,14 @@ data:
       enabled: false
 
     mqtt:
-      enabled: false
+      enabled: true
+      # host is not an EnvString in frigate 0.17, credentials are: frigate
+      # expands {FRIGATE_MQTT_USERNAME}/{FRIGATE_MQTT_PASSWORD} from the pod
+      # environment, which cluster-secrets feeds via the HelmRelease.
+      host: 10.0.50.96
+      port: 1883
+      user: '{FRIGATE_MQTT_USERNAME}'
+      password: '{FRIGATE_MQTT_PASSWORD}'
 
     # Object detection on the Intel iGPU via OpenVINO (bundled SSD MobileNet
     # v2) instead of the CPU TFLite fallback. In 0.17 the model config is a
@@ -70,6 +77,11 @@ data:
           fps: 5
         objects:
           track: [person]
+          mask:
+            object_mask_1:
+              friendly_name: Object Mask 1
+              enabled: true
+              coordinates: 0.792,0.991,1,1,1,0,0.605,0,0.794,0.405,0.842,0.672
         record:
           enabled: true
           alerts:
@@ -93,6 +105,11 @@ data:
           motion:
             days: 0
 
+        zones:
+          voortuin:
+            coordinates: 0,1,0.48,1,0.587,0.233,0.436,0,0.302,0
+            loitering_time: 0
+            friendly_name: Voortuin
     snapshots:
       enabled: true
       retain:
