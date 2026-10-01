@@ -7,4 +7,4 @@ resources:
   # GitRepository and Kustomization that need them, whichever way round these two
   # are listed.
   - ../apps/flux-system/flux-instance
-  - github.com/fluxcd/flux2/manifests/install?ref=v2.7.5
+  - github.com/fluxcd/flux2/manifests/install?ref=2.9.6
