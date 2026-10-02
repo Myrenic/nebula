@@ -1,4 +1,14 @@
 # App source lives in its own repository; this file is what makes Flux read it.
+#
+# Pinned to a commit rather than tracking `main`. The branch was polled every
+# minute, so a push to that repository reached this cluster without review here.
+# Upstream publishes no tags (`git ls-remote --tags` returns nothing), so a
+# commit is the only immutable ref available. Bump it by hand:
+#
+#     git ls-remote https://github.com/Myrenic/mushroom-finder refs/heads/main
+#
+# and copy the sha over the one below. Renovate cannot follow a commit, so this
+# bump is a human step; the interval still polls the same immutable commit.
 apiVersion: source.toolkit.fluxcd.io/v1
 kind: GitRepository
 metadata:
@@ -7,5 +17,5 @@ metadata:
 spec:
   interval: 1m
   ref:
-    branch: main
+    commit: cbb29869e858d9eae0cb1d5759ce7e746eef6282
   url: https://github.com/Myrenic/mushroom-finder

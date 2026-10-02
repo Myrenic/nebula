@@ -14,7 +14,13 @@ spec:
           app:
             image:
               repository: louislam/uptime-kuma
-              tag: 2-slim
+              # Was the floating `2-slim`. Pinned to what that tag resolves to
+              # today: both digests are sha256:9c56a772... (checked 2026-10-02),
+              # so the pin freezes the current 2.x release rather than choosing
+              # one. The running pod still carries the older 2.5.3-slim build,
+              # so the next reconcile rolls it forward inside 2.x. Renovate can
+              # only follow an exact tag, which is the other half of the point.
+              tag: 2.5.5-slim
             env:
               TZ: "${TZ}"
             resources:
@@ -23,9 +29,45 @@ spec:
                 memory: 128Mi
               limits:
                 memory: 512Mi
+            probes:
+              # readiness is the community chart's default endpoint (GET / on the
+              # app port; it answers 302 to /dashboard, which kubelet counts as
+              # success). liveness uses the extra/healthcheck binary the image
+              # ships, which is what uptime-kuma itself recommends; the 180s
+              # delay is upstream's number for a server that has to open its
+              # SQLite database first.
+              readiness:
+                enabled: true
+                custom: true
+                spec:
+                  httpGet:
+                    path: /
+                    port: 3001
+                  initialDelaySeconds: 10
+                  periodSeconds: 10
+                  timeoutSeconds: 5
+                  failureThreshold: 6
+              liveness:
+                enabled: true
+                custom: true
+                spec:
+                  exec:
+                    command:
+                      - /app/extra/healthcheck
+                  initialDelaySeconds: 180
+                  periodSeconds: 30
+                  # The binary gives up on its own request after 28s, so the
+                  # probe has to wait longer than that or a slow start reads as
+                  # a dead process.
+                  timeoutSeconds: 30
+                  failureThreshold: 3
             securityContext:
               runAsNonRoot: true
               allowPrivilegeEscalation: false
+              # Everything it writes goes to the /app/data volume; verified by
+              # running the image with --read-only and the volume plus the /tmp
+              # emptyDir below (it serves / and its own healthcheck exits 0).
+              readOnlyRootFilesystem: true
               capabilities:
                 drop: ["ALL"]
     defaultPodOptions:
@@ -49,3 +91,10 @@ spec:
         size: 5Gi
         globalMounts:
           - path: /app/data
+      # Node's module loader and the bundled build tools want a writable /tmp
+      # even when nothing of theirs is meant to survive; the read-only root
+      # filesystem needs one.
+      tmp:
+        type: emptyDir
+        globalMounts:
+          - path: /tmp

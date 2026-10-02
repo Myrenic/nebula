@@ -9,3 +9,4 @@ metadata:
     # dropped capabilities (verified against the running pods), so this
     # namespace does not need to be exempt from the baseline policy.
     pod-security.kubernetes.io/enforce: baseline
+    pod-security.kubernetes.io/enforce-version: v1.37

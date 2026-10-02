@@ -5,6 +5,7 @@ resources:
   - ./helmrelease.yaml
   - ./ocirepository.yaml
   - ./postgres-helmrelease.yaml
+  - ./realm-import-job.yaml
 configMapGenerator:
   # Keycloak reads themes from its filesystem - themes/<name>/<login|account|admin>/
   # theme.properties, with the stylesheet and images beside it under resources/ -
@@ -16,14 +17,22 @@ configMapGenerator:
       - theme/nebula/login/theme.properties
       - theme/nebula/login/resources/css/nebula.css
       - theme/nebula/login/resources/img/nebula-mark.svg
+  # The realm the keycloak-realm-import Job creates: realm, its webui client and
+  # that client's secret (as an $(env:...) placeholder, never a value). A file
+  # rather than a ConfigMap written by hand, so that what the CLI imports is
+  # exactly what `jq .` can check in a checkout.
+  - name: keycloak-realm
+    files:
+      - realm/nebula.json
 generatorOptions:
   # The generator would otherwise suffix the name with a content hash, and
   # kustomize only rewrites that suffix in the fields it knows - which does not
-  # include a HelmRelease's values, where the mounts are declared. With the hash
-  # on, the release would keep mounting the unsuffixed ConfigMap that Flux prunes.
-  # Off, the name is stable; a theme change is then applied by
-  # `kubectl -n auth rollout restart deploy/keycloak`, because these are subPath
-  # mounts and the kubelet does not refresh those under a running pod.
+  # include a HelmRelease's values or a Job's volume list, where the mounts are
+  # declared. With the hash on, the release and the Job would keep mounting the
+  # unsuffixed ConfigMaps that Flux prunes. Off, the names are stable; a theme
+  # change is then applied by `kubectl -n auth rollout restart deploy/keycloak`,
+  # because those are subPath mounts and the kubelet does not refresh them under
+  # a running pod.
   disableNameSuffixHash: true
   labels:
     app.kubernetes.io/name: keycloak

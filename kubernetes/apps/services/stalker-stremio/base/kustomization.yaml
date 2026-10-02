@@ -5,6 +5,11 @@ resources:
   - ./deployment.yaml
   - ./service.yaml
 configMapGenerator:
+  # Only the files the addon loads at runtime. Two files in this directory are
+  # deliberately not listed and are therefore never applied or shipped:
+  #   - Dockerfile: marked `# not-applied` at the top; a local build convenience.
+  #   - src/stalker.test.js: needs `node --test` and the test runner, so it is
+  #     run from a checkout (`npm test`), not from a ConfigMap in the cluster.
   - name: stalker-stremio-src
     files:
       - src/server.js

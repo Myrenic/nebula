@@ -20,7 +20,14 @@ spec:
           app:
             image:
               repository: postgres
-              tag: 18-alpine
+              # Was the floating `18-alpine`. Pinned to what that tag resolves to
+              # today (sha256:77f58511..., checked 2026-10-02). The pod running
+              # right now carries an earlier 18.x build whose exact tag - the
+              # 18.5 line - upstream has since taken down, so this pin moves it
+              # forward one minor inside 18 rather than freezing a tag that no
+              # longer exists; 18.x shares a data directory format, so the PVC
+              # is read by both.
+              tag: 18.6-alpine
             env:
               POSTGRES_USER: keycloak
               POSTGRES_DB: keycloak
@@ -32,8 +39,70 @@ spec:
                 memory: 256Mi
               limits:
                 memory: 1Gi
+            probes:
+              # pg_isready ships in the image and answers the only question that
+              # matters here: is the server accepting connections on the socket.
+              # keycloak (and its config-cli Job) wait on this readiness - a
+              # database that is up but still replaying WAL would otherwise let
+              # keycloak start against a socket it cannot use yet. The exec runs
+              # as the postgres user, so it needs no credential to say so.
+              readiness:
+                enabled: true
+                custom: true
+                spec:
+                  exec:
+                    command:
+                      - pg_isready
+                      - -U
+                      - keycloak
+                      - -d
+                      - keycloak
+                  initialDelaySeconds: 5
+                  periodSeconds: 5
+                  timeoutSeconds: 3
+                  failureThreshold: 6
+              liveness:
+                enabled: true
+                custom: true
+                spec:
+                  exec:
+                    command:
+                      - pg_isready
+                      - -U
+                      - keycloak
+                      - -d
+                      - keycloak
+                  # A server that is recovering from a crash reads as "not
+                  # ready" for a while and must not be restarted for it; that is
+                  # what the long initial delay and the loose thresholds are for.
+                  initialDelaySeconds: 60
+                  periodSeconds: 30
+                  timeoutSeconds: 5
+                  failureThreshold: 5
+            securityContext:
+              # uid/gid 70 is the `postgres` user the image ships (verified in
+              # the running pod: `id postgres` -> uid=70(postgres)). Running as
+              # 70 rather than as root is safe even on a fresh volume: the
+              # entrypoint skips its chown, creates PGDATA inside the fsGroup-owned
+              # volume root, and initdb owns what it creates. Verified by running
+              # postgres:18.6-alpine as --user 70:70 against a root:70 0770
+              # directory - it initialised and answered pg_isready.
+              runAsNonRoot: true
+              runAsUser: 70
+              runAsGroup: 70
+              allowPrivilegeEscalation: false
+              capabilities:
+                drop: ["ALL"]
+              # No readOnlyRootFilesystem: the server writes its pid file and
+              # socket under /var/run/postgresql and its temp files in /tmp, both
+              # of which live in the image layer rather than on the volume.
     defaultPodOptions:
       securityContext:
+        # The volume root is root-owned when Longhorn provisions it, so the
+        # group has to be the one the entrypoint will write as; OnRootMismatch
+        # makes kubelet fix it once instead of on every mount.
+        fsGroup: 70
+        fsGroupChangePolicy: OnRootMismatch
         seccompProfile:
           type: RuntimeDefault
     service:

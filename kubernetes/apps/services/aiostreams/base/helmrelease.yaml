@@ -18,9 +18,14 @@ spec:
               # this changes nothing that is running; it only makes the version
               # visible and updatable by Renovate.
               tag: v2.35.7
-            envFrom:
-              - secretRef:
-                  name: aiostreams-secret
+            # Every credential comes from `cluster-secrets` through the
+            # Kustomization's postBuild substitution, so there is exactly one
+            # place a value can live. There used to be a second copy here as an
+            # encrypted Secret mounted with envFrom, which was worse than
+            # redundant: that Kustomization never carried a `decryption:` block,
+            # so what landed in the cluster was the literal ciphertext
+            # (`SECRET_KEY=ENC[AES256_GCM,...]`). It stayed invisible only
+            # because these inline values win over envFrom.
             env:
               TZ: "${TZ}"
               ADDON_NAME: "AIOStreams"
@@ -33,6 +38,31 @@ spec:
               AIOSTREAMS_AUTH_REQUIRED: "true"
               DATABASE_URI: "sqlite://./data/db.sqlite"
               LOG_LEVEL: "http"
+            # `/api/v1/health` answers 200 without credentials, verified through
+            # the ingress on 2026-10-02 (the bare /health, /healthz and
+            # /api/health paths all answer 404, and the image is distroless
+            # enough that there is no shell to poke at it locally). Without a
+            # probe this container had none at all: a wedged process kept
+            # receiving the family's addon requests and nothing noticed.
+            probes:
+              readiness:
+                enabled: true
+                custom: true
+                spec:
+                  httpGet:
+                    path: /api/v1/health
+                    port: 3000
+                  initialDelaySeconds: 5
+                  periodSeconds: 10
+              liveness:
+                enabled: true
+                custom: true
+                spec:
+                  httpGet:
+                    path: /api/v1/health
+                    port: 3000
+                  initialDelaySeconds: 30
+                  periodSeconds: 20
             resources:
               requests:
                 cpu: 50m

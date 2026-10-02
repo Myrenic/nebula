@@ -1,0 +1,29 @@
+{
+  "realm": "nebula",
+  "enabled": true,
+  "displayName": "Nebula",
+  "loginTheme": "nebula",
+  "sslRequired": "external",
+  "registrationAllowed": false,
+  "clients": [
+    {
+      "clientId": "webui",
+      "name": "Open WebUI",
+      "description": "oauth2-proxy's confidential OIDC client. The secret is substituted from the keycloak-webui-oauth Secret, so the realm and the proxy cannot drift apart.",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "secret": "$(env:OAUTH2_CLIENT_SECRET)",
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "redirectUris": [
+        "https://auth.${SECRET_DOMAIN_0}/oauth2/callback"
+      ],
+      "webOrigins": [
+        "https://auth.${SECRET_DOMAIN_0}"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: frigate
+  annotations:
+    kustomize.toolkit.fluxcd.io/prune: disabled
+  labels:
+    # privileged on purpose: frigate mounts the iGPU render node and runs with
+    # privileged: true, as its own container documents. It has a namespace of
+    # its own for exactly that reason - the nine other services each declare a
+    # non-root securityContext, so they are held to baseline (see
+    # kubernetes/apps/services/namespace.yaml) and this is the only pod in the
+    # cluster that has to be exempted by namespace rather than by workload.
+    pod-security.kubernetes.io/enforce: privileged
+    pod-security.kubernetes.io/enforce-version: v1.37

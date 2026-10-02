@@ -42,18 +42,37 @@ in the realm the applications authenticate against.
 | `master` | the bootstrap admin (`KEYCLOAK_ADMIN_USERNAME`) and any administrator you add there deliberately | the admin console, `https://keycloak.${SECRET_DOMAIN_0}/admin/master/console/` |
 | `nebula` | the people who sign in to this cluster's apps, and no `realm-management` role for any of them | OIDC for oauth2-proxy; self-service at `https://keycloak.${SECRET_DOMAIN_0}/realms/nebula/account` |
 
-## The realm is not in git
+## The realm is in git, create-only
 
-Nothing in this repository manages Keycloak's configuration, so the realm, its
-clients and its users exist only in Keycloak's database. What is hand-made:
+The realm `nebula`, its confidential client `webui` and the client's secret
+placeholder are declared in `keycloak/base/realm/nebula.json` and applied by the
+`keycloak-realm-import` Job, which reads the file from the `keycloak-realm`
+ConfigMap. No secret is in the file: the client's `secret` field carries
+`$(env:OAUTH2_CLIENT_SECRET)`, and the Job takes that variable from the
+hand-made `keycloak-webui-oauth` Secret - the same Secret oauth2-proxy reads, so
+the realm and the proxy cannot drift apart.
+
+The Job is create-only by construction: it asks the admin API for the realm and
+exits without importing if it already exists. On a fresh cluster that is what
+creates the realm, the client and the gate; on this cluster, where the realm is
+already hand-made, it writes nothing. The consequence is worth stating plainly:
+editing `nebula.json` does **not** change a realm that already exists.
+`keycloak-config-cli` has no `import.behavior=IGNORE_EXISTING` option - it is not
+in 6.5.1 (nor in v3, v4 or v5) - so the guard in the Job is what implements those
+semantics. The Job's header says how to switch to the reconciling behaviour and
+what to read first (`import.managed.client=full` deletes clients a live realm
+holds and the JSON does not).
+
+What is still hand-made:
 
 | Object | Where its value comes from |
 | --- | --- |
-| The realm `nebula` | settings only - `sslRequired: external`, `loginTheme: nebula`, the default token lifetimes, no self-registration - so a rebuild is one API call |
-| The client `webui` (confidential) | the secret is `client-secret` in the `keycloak-webui-oauth` Secret |
-| The users | created in the console; a realm created this way starts empty |
+| The users | created in the console; a realm created this way starts empty, and a password belongs in no git file |
+| The client secret itself | `client-secret` in the `keycloak-webui-oauth` Secret, created out of band (below) |
 
-That call, with the client secret filled in from the source above:
+If the Job cannot run - the `keycloak-webui-oauth` Secret does not exist yet, so
+its pod cannot start - the same realm can be created by hand. That call, with the
+client secret filled in from the source above, is the manual equivalent:
 
 ```bash
 TOKEN=$(curl -sS -d "client_id=admin-cli&username=$KEYCLOAK_ADMIN_USERNAME&password=$KEYCLOAK_ADMIN_PASSWORD&grant_type=password" \
@@ -116,10 +135,11 @@ in the React the design was written for. The one non-obvious dependency is
 `styles` replaces the parent's list rather than adding to it, so the parent's own
 layout sheet is named again to keep it.
 
-What stays hand-made is the single word that selects the theme, because a realm
-that has never been told otherwise uses the bundled one. It is part of the realm
-and `loginTheme` is set with everything else when the realm is created (above);
-for a realm that already exists:
+The theme is selected by a single word inside the realm, and a realm that has
+never been told otherwise uses the bundled one. `loginTheme: nebula` is part of
+`realm/nebula.json`, so the import sets it when the realm is created; for a realm
+that already exists - which the create-only Job deliberately leaves alone - it is
+one call:
 
 ```bash
 # $TOKEN as above.
@@ -203,10 +223,14 @@ copied from `OAUTH2_PROXY_COOKIE_SECRET` in
 `kubernetes/apps/common/cluster-secrets.sops.yaml`. The Secret object itself is
 in no kustomization and no SOPS file, so a rebuilt cluster needs it recreated by
 hand. oauth2-proxy reads these values at start: restart the Deployment after
-replacing the Secret.
+replacing the Secret. The `keycloak-realm-import` Job reads `client-secret` from
+this same Secret, so on a rebuild it must exist before that Job's pod can start -
+create it before the first reconcile, as this section does by hand.
 
 The realm is `nebula` and the client is `webui` (confidential,
-redirect URI `https://auth.${SECRET_DOMAIN_0}/oauth2/callback`). Keycloak's
+redirect URI `https://auth.${SECRET_DOMAIN_0}/oauth2/callback`, declared in
+`keycloak/base/realm/nebula.json`). Keycloak's
 bootstrap admin and Postgres credentials come from `KEYCLOAK_ADMIN_USERNAME`,
 `KEYCLOAK_ADMIN_PASSWORD` and `KEYCLOAK_DB_PASSWORD` in `cluster-secrets`; that
-admin is the `master` realm's, and administers everything.
+admin is the `master` realm's, and administers everything, including the realm
+import Job above.

@@ -1,0 +1,177 @@
+# The realm, its client and that client's secret are what make the identity gate
+# work, and until this Job they existed only in Keycloak's database: a rebuild
+# from git produced a cluster whose sign-in could not work at all. This Job
+# imports realm/nebula.json - rendered into the keycloak-realm ConfigMap - from
+# Flux, authenticating as the bootstrap admin of the master realm.
+#
+# Why a shell guard instead of `--import-behavior=IGNORE_EXISTING`: that option
+# does not exist in keycloak-config-cli. It is absent from the 6.5.1 source tree
+# (grep of the release tarball finds no IGNORE_EXISTING) and from the option
+# table in its README at v3, v4, v5 and v6; `import.behaviors.*` covers user
+# federation and checksums, and `import.managed.*` decides what may be deleted,
+# not whether an existing realm is touched. Spring would ignore an unknown
+# option silently, which is worse than not passing it.
+#
+# So the create-only behaviour lives here: if the realm endpoint answers 200,
+# the Job exits 0 and writes nothing. Stated plainly, that is the trade-off -
+# on a FRESH cluster the realm and its client are created, and on an EXISTING
+# one nothing is written at all, which also means a later edit to nebula.json
+# does not reach a cluster that already has the realm. To switch to the
+# reconciling ("FULL") behaviour, drop the guard block below and let the CLI run
+# unconditionally - but read keycloak-config-cli's docs/MANAGED.md first: with
+# its default `import.managed.client=full`, a run against a live realm deletes
+# every client the realm holds and the JSON does not.
+#
+# Users stay hand-made (README.md, "Add a user"): a user needs a password, and
+# no password belongs in git. This Job restores the gate, not the people behind
+# it.
+#
+# Every shell expansion in the command below is written $${VAR} rather than
+# ${VAR} on purpose. This Kustomization substitutes variables in its rendered
+# output (postBuild.substituteFrom: cluster-secrets), and Flux replaces a
+# placeholder that no source defines with an empty string - so a plain ${token}
+# would arrive at the container as nothing at all and the script would run with
+# its variables emptied. $${VAR} survives that pass and reaches the container as
+# ${VAR}. Flux leaves bare $VAR and $(command) alone, which is why those are
+# written normally.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: keycloak-realm-import
+  annotations:
+    # A Job's pod template is immutable, and this repository's dependency bot
+    # will bump the image below. Without this, that bump fails the apply with
+    # "field is immutable" and leaves this Kustomization NotReady - an image
+    # update for a one-shot realm import should not be able to break the auth
+    # namespace. With it, kustomize-controller deletes and recreates the Job when
+    # the patch cannot be applied, which re-runs the import; the create-only
+    # guard above makes a re-run a no-op.
+    kustomize.toolkit.fluxcd.io/force: enabled
+spec:
+  backoffLimit: 6
+  template:
+    spec:
+      restartPolicy: Never
+      securityContext:
+        # 65534 is the user the image sets (verified with `id` in
+        # quay.io/adorsys/keycloak-config-cli:6.5.1-26.5.5: uid=65534(nobody)).
+        runAsNonRoot: true
+        runAsUser: 65534
+        runAsGroup: 65534
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: keycloak-config-cli
+          # The `-26.5.5` suffix names the Keycloak release the CLI's client
+          # libraries are built against; the admin REST API it uses is stable
+          # across 26.x and the cluster runs 26.7.4. Exact tag, not `latest` or
+          # `latest-26`.
+          image: quay.io/adorsys/keycloak-config-cli:6.5.1-26.5.5
+          command:
+            - /bin/bash
+            - -c
+            - |
+              set -euo pipefail
+
+              realm_url="$${KEYCLOAK_URL}/admin/realms/nebula"
+
+              # The token comes from the master realm, where the bootstrap admin
+              # lives. Retry rather than fail: this pod can be scheduled before
+              # keycloak has finished its first start, which is also when that
+              # admin is created. curl/awk are in the image.
+              token=""
+              for attempt in $(seq 1 60); do
+                token=$(curl -sf -X POST \
+                  -d "client_id=admin-cli" \
+                  -d "username=$${KEYCLOAK_USER}" \
+                  --data-urlencode "password=$${KEYCLOAK_PASSWORD}" \
+                  -d "grant_type=password" \
+                  "$${KEYCLOAK_URL}/realms/master/protocol/openid-connect/token" \
+                  | awk -F'"' '/access_token/{print $4}') || true
+                if [ -n "$${token}" ]; then break; fi
+                echo "waiting for an admin token from $${KEYCLOAK_URL} (attempt $${attempt}/60)"
+                sleep 5
+              done
+              if [ -z "$${token}" ]; then
+                echo "no admin token after 5 minutes; giving up" >&2
+                exit 1
+              fi
+
+              # ---- create-only guard; see the note at the top of this file ----
+              code=$(curl -s -o /dev/null -w '%{http_code}' \
+                -H "Authorization: Bearer $${token}" "$${realm_url}")
+              if [ "$${code}" = "200" ]; then
+                echo "realm nebula already exists (HTTP 200); importing nothing"
+                exit 0
+              fi
+              if [ "$${code}" != "404" ]; then
+                echo "unexpected answer from $${realm_url}: HTTP $${code}" >&2
+                exit 1
+              fi
+              echo "realm nebula does not exist (HTTP 404); importing"
+              # ------------------------------------------------------------------
+
+              exec java $${JAVA_OPTS:-} -jar /app/keycloak-config-cli.jar
+          env:
+            # The keycloak Service in this namespace; plain http because that is
+            # what KC_HTTP_ENABLED serves and Traefik terminates TLS in front of
+            # the public hostname.
+            - name: KEYCLOAK_URL
+              value: http://keycloak.auth.svc.cluster.local:8080
+            - name: KEYCLOAK_USER
+              valueFrom:
+                secretKeyRef:
+                  name: cluster-secrets
+                  key: KEYCLOAK_ADMIN_USERNAME
+            - name: KEYCLOAK_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: cluster-secrets
+                  key: KEYCLOAK_ADMIN_PASSWORD
+            # What the CLI substitutes for $(env:OAUTH2_CLIENT_SECRET) in
+            # nebula.json, and the same value oauth2-proxy reads through
+            # config.existingSecret (oauth2-proxy/base/helmrelease.yaml), so the
+            # two cannot drift apart. Note the source: it is the hand-made
+            # keycloak-webui-oauth Secret, because cluster-secrets holds no
+            # client-secret key for this client (README.md, "Out-of-band
+            # secrets"). var-substitution is off by default in the CLI, hence
+            # the flag below.
+            - name: OAUTH2_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: keycloak-webui-oauth
+                  key: client-secret
+            - name: IMPORT_FILES_LOCATIONS
+              value: file:/config/nebula.json
+            - name: IMPORT_VARSUBSTITUTION_ENABLED
+              value: "true"
+            # Belt and braces with the retry loop above; the CLI's own check.
+            - name: KEYCLOAK_AVAILABILITYCHECK_ENABLED
+              value: "true"
+            - name: KEYCLOAK_AVAILABILITYCHECK_TIMEOUT
+              value: 300s
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              memory: 512Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            # Java writes its temp files under /tmp only; verified by running the
+            # image read-only with just that mount.
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: realm
+              mountPath: /config
+              readOnly: true
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: realm
+          configMap:
+            name: keycloak-realm
+        - name: tmp
+          emptyDir: {}

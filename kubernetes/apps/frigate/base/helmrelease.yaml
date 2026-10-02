@@ -38,6 +38,23 @@ spec:
                 else
                   echo "/config/config.yml already present, keeping it"
                 fi
+            resources:
+              requests:
+                cpu: 10m
+                memory: 16Mi
+              limits:
+                memory: 64Mi
+            securityContext:
+              # Deliberately not runAsNonRoot: it writes into the /config PVC,
+              # which the image owns as root (there is no fsGroup on this pod,
+              # because the main container needs the device nodes as they are).
+              # It only reads one ConfigMap file and writes that file once, so
+              # it needs no privilege to do it.
+              allowPrivilegeEscalation: false
+              capabilities:
+                drop: ["ALL"]
+              seccompProfile:
+                type: RuntimeDefault
         containers:
           app:
             image:
@@ -64,8 +81,54 @@ spec:
                 memory: 6Gi
             securityContext:
               # Frigate needs device access (iGPU render node) and privileged
-              # helper processes; the official docs recommend privileged.
+              # helper processes; the official docs recommend privileged. A
+              # privileged container is unconfined anyway - see the note where
+              # the pod-level seccompProfile used to be - so nothing about its
+              # capability set is narrowed here.
+              #
+              # readOnlyRootFilesystem is deliberately not set: the documented
+              # writable paths (/config, /media/frigate, /dev/shm, /tmp/cache) are
+              # all mounted, but the container is privileged and loads the iGPU
+              # userspace from the image, and a read-only root has not been
+              # verified for it. Guessing here would risk the recording path.
               privileged: true
+            probes:
+              # /api/version is frigate's own documented HTTP API endpoint
+              # (GET /api/version) served on the internal port; the 8971 port in
+              # the Service is Traefik's, not frigate's. The startup budget is
+              # generous because the OpenVINO detector loads YOLO-NAS and the
+              # face model from disk before the API answers, and liveness does
+              # not begin until startup has passed.
+              startup:
+                enabled: true
+                custom: true
+                spec:
+                  httpGet:
+                    path: /api/version
+                    port: 5000
+                  periodSeconds: 10
+                  timeoutSeconds: 5
+                  failureThreshold: 60
+              readiness:
+                enabled: true
+                custom: true
+                spec:
+                  httpGet:
+                    path: /api/version
+                    port: 5000
+                  periodSeconds: 10
+                  timeoutSeconds: 5
+                  failureThreshold: 6
+              liveness:
+                enabled: true
+                custom: true
+                spec:
+                  httpGet:
+                    path: /api/version
+                    port: 5000
+                  periodSeconds: 30
+                  timeoutSeconds: 5
+                  failureThreshold: 5
           reolinkproxy:
             # Translates Reolink's proprietary Baichuan protocol (TCP 9000)
             # into stable RTSP - the camera's own RTSP server is flaky with
@@ -93,6 +156,19 @@ spec:
                 memory: 64Mi
               limits:
                 memory: 256Mi
+            securityContext:
+              # The sidecar is not privileged - it only opens a TCP connection
+              # to the camera - so it carries the standard non-root set instead
+              # of inheriting the app container's privilege.
+              #
+              # No readOnlyRootFilesystem: unlike searxng, spottarr and
+              # uptime-kuma, this sidecar was not run against a read-only root,
+              # so its write paths are unknown and are left as they are.
+              allowPrivilegeEscalation: false
+              capabilities:
+                drop: ["ALL"]
+              seccompProfile:
+                type: RuntimeDefault
             probes:
               liveness:
                 enabled: true
@@ -108,12 +184,15 @@ spec:
                   failureThreshold: 3
     defaultPodOptions:
       annotations:
-        # The one volume in auth+services that is not worth an off-site copy:
+        # The one volume in this namespace that is not worth an off-site copy:
         # `media` is ~70 GiB of camera recordings against ~11 GiB for everything
-        # else in those namespaces combined. Excluding it by name (rather than
+        # else in auth+services combined. Excluding it by name (rather than
         # selecting the apps that *are* backed up) keeps the backup fail-open:
         # a container added later is protected by default, and this line is the
         # only thing that has to be reconsidered when it is not wanted.
+        #
+        # The frigate namespace has to be listed in the velero schedules in
+        # kubernetes/apps/backup for this annotation to matter at all.
         backup.velero.io/backup-volumes-excludes: media
       # Frigate needs an Intel iGPU for VA-API/QSV (LIBVA_DRIVER_NAME=iHD); the
       # third machine is a Proxmox VM with no /dev/dri render node it can use.
@@ -127,9 +206,12 @@ spec:
               - matchExpressions:
                   - key: extensions.talos.dev/i915
                     operator: Exists
-      securityContext:
-        seccompProfile:
-          type: RuntimeDefault
+      # No pod-level seccompProfile, unlike every other app. The app container is
+      # privileged, and the kubelet does not apply a seccomp profile to a
+      # privileged container - it runs unconfined whatever is written here. A
+      # RuntimeDefault at pod level therefore described something this pod never
+      # got, and the two unprivileged containers that do need it (seed-config,
+      # reolinkproxy) set their own.
     service:
       app:
         controller: frigate
