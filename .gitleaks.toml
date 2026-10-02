@@ -1,0 +1,10 @@
+# Allowlists for this repository. Keep every entry narrow and say why.
+#
+# The Keycloak HelmRelease has a JDBC URL and a "${KEYCLOAK_DB_PASSWORD}"
+# placeholder; the generic-api-key rule reads the URL as a credential. Matched
+# on the finding itself, not the file, so a real key added there still trips.
+[[rules]]
+id = "generic-api-key"
+  [[rules.allowlists]]
+  description = "JDBC connection URL, not a credential"
+  regexes = ['''jdbc:postgresql://[a-z0-9-]+:[0-9]+/[a-z0-9_]+''']

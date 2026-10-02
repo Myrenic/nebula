@@ -57,3 +57,12 @@ hubble:
     enabled: true
   ui:
     enabled: false
+  # Let Cilium's operator create and rotate the TLS material in-cluster.
+  #
+  # The default (`helm`) has `helm template` bake the CA and the Hubble
+  # certs into the rendered manifest - and that manifest is committed, so the
+  # private keys ended up in git. The scan found them. With `cronJob` the
+  # manifest carries no key material at all.
+  tls:
+    auto:
+      method: cronJob
