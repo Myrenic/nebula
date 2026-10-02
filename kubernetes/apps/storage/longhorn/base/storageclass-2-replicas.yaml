@@ -1,3 +1,30 @@
+# A second StorageClass for volumes that want two copies from creation, instead
+# of being grown to 2 later by the replica-adjuster CronJob.
+#
+# Only `numberOfReplicas` differs from Longhorn's own defaults. The three
+# parameters this file used to repeat were all no-ops, so they are gone:
+#   * `staleReplicaTimeout: "2880"` is the value Longhorn already applies when
+#     the StorageClass says nothing: the CSI provisioner falls back to it
+#     (longhorn-manager csi/util.go: defaultStaleReplicaTimeout = 2880, "48h";
+#     applied when the parameter is unset or <= 0). 48 hours is the value worth
+#     having - an unhealthy replica keeps its on-disk data for two days, which
+#     is the copy a node that comes back is salvaged or rebuilt from (the
+#     faulted `frigate-media` in docs/cluster.md came back from exactly that
+#     replica). Note this is *not* what the chart's own default StorageClass
+#     does: it pins 30, which is why most volumes here read
+#     staleReplicaTimeout: 30. This class deliberately keeps 48h.
+#   * `fromBackup: ""` is Longhorn's default: provision an empty volume.
+#   * `fsType: ext4` is Longhorn's default (csi/node_server.go defaultFsType,
+#     and the CSI plugin is deployed with --default-fstype=ext4).
+#
+# StorageClass `parameters` are immutable in the API server ("updates to
+# parameters are forbidden", ValidateStorageClassUpdate), so this change cannot
+# be applied by Flux on its own: delete the object once and let Flux recreate
+# it. Nothing existing is lost - already-bound PVCs keep their PVs, and the
+# parameters of those volumes live in the PV's CSI volumeAttributes, not here -
+# but a PVC created in the gap finds no such StorageClass.
+#
+#   kubectl delete storageclass longhorn-2-replicas
 apiVersion: storage.k8s.io/v1
 kind: StorageClass
 metadata:
@@ -10,6 +37,3 @@ reclaimPolicy: Retain
 volumeBindingMode: WaitForFirstConsumer
 parameters:
   numberOfReplicas: "2"
-  staleReplicaTimeout: "2880"
-  fromBackup: ""
-  fsType: ext4

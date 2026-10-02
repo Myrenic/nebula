@@ -33,9 +33,30 @@ spec:
       # outside git), and at 100 the sum of requested volumes per disk may not
       # exceed the disk size - so the second replica of the existing volumes
       # could not be scheduled ("insufficient storage") and everything stayed at
-      # one replica. At 200 it fits, and actual usage stays far below capacity
-      # (roughly 740 of 1211 GiB).
+      # one replica. At 200 it fits.
+      #
+      # The headroom that buys is what makes the replica-adjuster's walk to 2
+      # replicas possible: the guard measures *scheduled* (reserved) bytes, not
+      # used bytes, and a second replica roughly doubles the reservation of a
+      # volume. So the standing assumption is that scheduled bytes per disk stay
+      # below 2x its capacity, which is not something to discover from a stalled
+      # volume - the highest scheduled/capacity ratio on any disk today is 70%
+      # (162.0 of 230.6 GiB on talos-45w-c87) while real usage is about 330 of
+      # 1211 GiB. Approaching either limit is what the monitoring layer should
+      # page on: those rule definitions live in kubernetes/apps/monitoring and
+      # consume the longhorn_disk_usage_bytes / longhorn_disk_reservation_bytes
+      # metrics the ServiceMonitor below exposes. The point is that reaching the
+      # guard shows up as an alert rather than as the stalled scheduling above.
       storageOverProvisioningPercentage: 200
+      # Delete the pods of a workload whose node went NotReady, instead of
+      # leaving them stuck on it: on a healthy cluster every volume has a
+      # surviving replica, so the replacement pod attaches elsewhere and the
+      # workload keeps running (this is what makes the surviving node carry the
+      # load in the README's failure drill). The cost is accepted and explicit:
+      # a single-replica volume whose replica sits on the down node cannot be
+      # attached by the rescheduled pod until the node returns, so that workload
+      # fails loudly rather than idling - which is why the adjuster grows
+      # volumes to 2 replicas, and why `frigate-media` is the known exception.
       nodeDownPodDeletionPolicy: delete-both-statefulset-and-deployment-pod
       replicaAutoBalance: best-effort
       allowVolumeCreationWithDegradedAvailability: true
@@ -55,6 +76,43 @@ spec:
       # requires deleting the longhorn StorageClass once, after which Helm
       # recreates it.
       volumeBindingMode: WaitForFirstConsumer
+    # The pre-upgrade job is back on. What it actually checks, from the source
+    # (longhorn-manager app/pre_upgrade.go -> upgradeutil.CheckUpgradePath):
+    #   * the Longhorn version upgrade path - one minor per hop, no downgrade;
+    #   * engine-image API compatibility for the engine images volumes still
+    #     refer to;
+    #   * the host environment (iscsiadm / open-iscsi present on the node).
+    # It is NOT a volume-health check, and nothing here should be read as one.
+    # Why it earns its place anyway: upgradeVersionCheck: true (below) already
+    # makes every longhorn-manager run the same check at startup, so a bad path
+    # cannot pass silently - but without the job the failure arrives *after* Helm
+    # has rolled the manager DaemonSet, i.e. as three CrashLooping managers with
+    # no volumes being managed and no obvious cause. With the job, the same check
+    # fails first and Flux reports the HelmRelease as failed while the old
+    # managers are still running, which is a diagnosis instead of an outage. It
+    # was switched off with the chart's "disable this for GitOps" note as the
+    # only reason; that note is about tools that leave hook Jobs behind, whereas
+    # helm-controller runs hooks and the chart's own delete policy
+    # (hook-succeeded,before-hook-creation,hook-failed) removes the Job after a
+    # pass or a failure.
+    #
+    # To take an upgrade the check refuses - a jump across two minors, say - do
+    # it as two upgrades rather than turning this off. If one hop is genuinely
+    # unavoidable, set jobEnabled: false in that single commit and say why.
     preUpgradeChecker:
-      jobEnabled: false
+      jobEnabled: true
       upgradeVersionCheck: true
+    # Longhorn serves its metrics on the longhorn-manager Service (port 9500).
+    # The label is load-bearing: Prometheus selects ServiceMonitors by
+    # `release: kube-prometheus-stack` (an exact match, not "all monitors"), so
+    # an unlabelled ServiceMonitor is created, looks healthy, and is never
+    # scraped. The other half of discovery is already satisfied - the Prometheus
+    # CR's serviceMonitorNamespaceSelector is empty, which means every namespace,
+    # so a monitor living here in `storage` is in scope. Without scraping, the
+    # volume-health and disk-headroom rules the monitoring layer holds have no
+    # data to fire on.
+    metrics:
+      serviceMonitor:
+        enabled: true
+        additionalLabels:
+          release: kube-prometheus-stack

@@ -14,6 +14,13 @@ spec:
     kind: GitRepository
     name: flux-system
     namespace: flux-system
+  # Needed for exactly one value: ${TZ}, which pins the Velero server's local
+  # time so its cron schedules mean the wall-clock times they are written as (see
+  # configuration.extraEnvVars in base/helmrelease.yaml).
+  postBuild:
+    substituteFrom:
+      - kind: Secret
+        name: cluster-secrets
   decryption:
     provider: sops
     secretRef:

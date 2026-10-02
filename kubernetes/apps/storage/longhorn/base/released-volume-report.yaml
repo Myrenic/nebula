@@ -1,0 +1,134 @@
+# Reports Longhorn volumes and PersistentVolumes that are Released and never
+# cleaned up.
+#
+# StorageClasses here use reclaimPolicy: Retain, so deleting a PVC deletes
+# nothing: the PV stays behind in phase Released and the matching
+# volumes.longhorn.io object keeps its replicas on disk, consuming capacity until
+# somebody removes them. Retain is the right default (a mistaken delete must not
+# destroy data), but nothing owned the cleanup - the only trace of it was one line
+# in the README. This job makes the backlog visible as a log line and stops there:
+# it deletes nothing, ever, because deciding that a Released volume's data is no
+# longer wanted is a human decision.
+#
+# To act on a line from this report, once the data is confirmed unwanted:
+#   kubectl get pv <pv>                                      # phase Released
+#   kubectl -n storage get volumes.longhorn.io <volume>       # state detached
+#   kubectl -n storage delete volumes.longhorn.io <volume>    # deletes the replicas, frees the disk
+#   kubectl delete pv <pv>                                    # removes the leftover PV
+# Deleting the volumes.longhorn.io object first is what actually frees the disk;
+# removing only the PV leaves the replicas in place.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: longhorn-released-volume-report
+  namespace: storage
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: longhorn-released-volume-report
+rules:
+  # Read-only by construction: this job reports, it never deletes.
+  - apiGroups: [""]
+    resources: ["persistentvolumes"]
+    verbs: ["list"]
+  - apiGroups: ["longhorn.io"]
+    resources: ["volumes"]
+    verbs: ["list"]
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: longhorn-released-volume-report
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: longhorn-released-volume-report
+subjects:
+  - kind: ServiceAccount
+    name: longhorn-released-volume-report
+    namespace: storage
+
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: longhorn-released-volume-report
+  namespace: storage
+spec:
+  # Daily, not more often: a Released volume holds its replicas for as long as
+  # nobody looks, so the point is that it cannot sit unseen for a month. 05:41
+  # keeps the line out of the backup window (02:13 and 04:13) so it cannot land
+  # between a Velero schedule and the check that it succeeded.
+  schedule: "41 5 * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      activeDeadlineSeconds: 120
+      backoffLimit: 1
+      template:
+        spec:
+          serviceAccountName: longhorn-released-volume-report
+          restartPolicy: OnFailure
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 65534
+            seccompProfile:
+              type: RuntimeDefault
+          containers:
+            - name: report
+              # Same image as the other in-cluster kubectl jobs. jq is what turns
+              # the creation timestamp into an age in days - busybox `date` in
+              # this image cannot parse RFC3339, so `date -d` is not an option.
+              image: alpine/k8s:1.37.1
+              command:
+                - /bin/sh
+                - -c
+                - |
+                  set -eu
+
+                  # Released PVs: the claim is gone, reclaimPolicy Retain kept the
+                  # object. claimRef may already be nil, hence the fallbacks.
+                  kubectl get pv -o json | jq -r '
+                    [ .items[]
+                      | select(.status.phase == "Released")
+                      | { name: .metadata.name,
+                          claim: ((.spec.claimRef.namespace // "?") + "/" + (.spec.claimRef.name // "?")),
+                          ageDays: ((now - (.metadata.creationTimestamp | fromdateiso8601)) / 86400 | floor) } ]
+                    | sort_by(-.ageDays)
+                    | (length | tostring) as $n
+                    | (if length > 0 then (.[0].ageDays | tostring) else "n/a" end) as $oldest
+                    | "[released-volume-report] Released PVs=\($n) oldestAgeDays=\($oldest)",
+                      (.[] | "  pv \(.name) claim=\(.claim) releasedAgeDays=\(.ageDays)")
+                  '
+
+                  # The Longhorn side of the same backlog: the volume object and
+                  # its replicas are what actually hold the disk.
+                  kubectl -n storage get volumes.longhorn.io -o json | jq -r '
+                    [ .items[]
+                      | select((.status.kubernetesStatus.pvStatus // "") == "Released")
+                      | { name: .metadata.name,
+                          sizeGiB: ((((.spec.size // 0) | tonumber) / 1073741824) | floor),
+                          ageDays: ((now - (.metadata.creationTimestamp | fromdateiso8601)) / 86400 | floor) } ]
+                    | sort_by(-.ageDays)
+                    | (length | tostring) as $n
+                    | (if length > 0 then (.[0].ageDays | tostring) else "n/a" end) as $oldest
+                    | "  longhorn-volumes Released=\($n) oldestAgeDays=\($oldest)",
+                      (.[] | "  lhvolume \(.name) sizeGiB=\(.sizeGiB) releasedAgeDays=\(.ageDays)")
+                  '
+
+                  echo "[released-volume-report] the counts above are the cleanup backlog; nothing is deleted automatically (see the header of this manifest)."
+              resources:
+                requests:
+                  cpu: 10m
+                  memory: 32Mi
+                limits:
+                  memory: 128Mi
+              securityContext:
+                allowPrivilegeEscalation: false
+                capabilities:
+                  drop: ["ALL"]
