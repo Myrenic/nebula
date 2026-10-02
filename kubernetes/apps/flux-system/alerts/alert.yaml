@@ -12,5 +12,18 @@ spec:
       name: "*"
     - kind: HelmRelease
       name: "*"
+    # The sources themselves. A GitRepository that stops fetching - the forge
+    # unreachable, the token revoked - makes every downstream reconcile
+    # meaningless, and it was the one failure this Alert could not report: the
+    # cluster would sit on a stale revision in silence. OCIRepository because
+    # that is where the app-template charts come from.
+    - kind: GitRepository
+      name: "*"
+    - kind: OCIRepository
+      name: "*"
   exclusionList:
-    - ".*upgrade retries exhausted.*"
+    # Narrowed on purpose. This used to drop every "upgrade retries exhausted"
+    # message, which is the most common HelmRelease error there is, so the most
+    # likely thing to be wrong was also the quietest. Kept for storm control on
+    # retries only, which Flux repeats on a fixed backoff.
+    - ".*Helm upgrade failed.*another operation .* in progress.*"
