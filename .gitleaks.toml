@@ -1,3 +1,7 @@
+[extend]
+# Keep the built-in rule set; a config file otherwise replaces it entirely.
+useDefault = true
+
 # Allowlists for this repository. Keep every entry narrow and say why.
 [[allowlists]]
 description = "The Keycloak chart's JDBC URL, read as a credential by generic-api-key"
