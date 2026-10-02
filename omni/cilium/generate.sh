@@ -19,6 +19,58 @@ CRD_PATH="pkg/k8s/apis/cilium.io/client/crds/v2"
 CRD_REF="v${CILIUM_VERSION}"
 OUT="cilium-install.yaml"
 
+# Every check below is a setting that fails silently rather than loudly when it
+# is wrong: a missing CRD makes CiliumNetworkPolicy a no-op, a missing
+# host-legacy-routing breaks CoreDNS, and a certificate baked into the manifest
+# put a private key in this repository once already - which is why the last
+# check looks for key material and not only for a setting.
+safety_checks() {
+  local file="$1"
+  crd_count="$(grep -c '^kind: CustomResourceDefinition' "${file}")"
+  [ "${crd_count}" -gt 10 ] || { echo "too few CRDs (${crd_count})" >&2; exit 1; }
+  grep -q 'ciliumnetworkpolicies' "${file}" || { echo "ciliumnetworkpolicies is missing" >&2; exit 1; }
+  grep -q 'enable-host-legacy-routing: "true"' "${file}" || {
+    echo "enable-host-legacy-routing is missing; on Talos DNS does not work without it" >&2; exit 1; }
+  grep -q 'kube-proxy-replacement: "false"' "${file}" || {
+    echo "kube-proxy-replacement is not false; kube-proxy still does service routing in this cluster" >&2; exit 1; }
+  # cgroup.autoMount.enabled=false renders as this root rather than as a value,
+  # because what it changes is whether Cilium mounts cgroupv2 itself. Talos
+  # already has it mounted; the rendered path proves the setting survived.
+  grep -q 'cgroup-root: "/sys/fs/cgroup"' "${file}" || {
+    echo "cgroup-root is missing; Cilium would try to mount cgroupv2 that Talos already mounts" >&2; exit 1; }
+  grep -q 'ipam: "kubernetes"' "${file}" || { echo "ipam is not set to kubernetes" >&2; exit 1; }
+  # The certificate generator, not certificates: `tls.auto.method: helm` signs
+  # the CA at render time and writes the private key into this file, which is
+  # committed.
+  grep -q 'hubble-generate-certs' "${file}" || {
+    echo "the hubble cert job is missing; tls.auto.method must stay cronJob so no key is rendered here" >&2; exit 1; }
+  if grep -q "SYS_MODULE" "${file}"; then
+    echo "SYS_MODULE is still in the capabilities; Talos refuses that" >&2; exit 1
+  fi
+  if grep -qE 'BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY|BEGIN AGE ENCRYPTED FILE|LS0tLS1CRUdJTiBSU0EgUFJJVkFURSBLRVk' "${file}"; then
+    echo "the render contains private key material; that must never be committed" >&2; exit 1
+  fi
+  echo "   ${file}: ${crd_count} CRDs, $(wc -l < "${file}") lines"
+}
+
+# `--check` answers "is the committed manifest still coherent with this script",
+# which is what CI runs. It needs no network, no helm and no age key: it compares
+# the version in the generated header against the default above and re-runs every
+# safety check against the committed file.
+#
+# It deliberately does NOT prove the file is what today's helm would produce -
+# that needs the upstream CRDs and the same helm version, so it stays a manual
+# step, and `git diff omni/cilium` after running this script is the review. Note
+# the header records the helm version for exactly that reason.
+if [ "${1:-}" = "--check" ]; then
+  [ -f "${OUT}" ] || { echo "${OUT} is missing; run ./generate.sh" >&2; exit 1; }
+  grep -q "^#   cilium : ${CILIUM_VERSION}$" "${OUT}" || {
+    echo "${OUT} was generated for another Cilium version than ${CILIUM_VERSION}; run ./generate.sh" >&2; exit 1; }
+  safety_checks "${OUT}"
+  echo "check: ${OUT} is coherent with CILIUM_VERSION=${CILIUM_VERSION}"
+  exit 0
+fi
+
 command -v helm >/dev/null || { echo "helm is missing" >&2; exit 1; }
 command -v python3 >/dev/null || { echo "python3 is missing" >&2; exit 1; }
 
@@ -43,6 +95,7 @@ helm repo update cilium >/dev/null
   echo "#   cilium : ${CILIUM_VERSION}"
   echo "#   CRD's  : github.com/${CRD_OWNER} ${CRD_REF}, ${CRD_PATH}"
   echo "#   values: omni/cilium/values.yaml"
+  echo "#   helm   : $(helm version --short 2>/dev/null || echo unknown)"
   echo "#"
   echo "# First the CRDs, then the chart. The Cilium Helm chart contains no"
   echo "# CRDs (helm show crds returns 0 lines). Without these files"
@@ -59,16 +112,5 @@ helm repo update cilium >/dev/null
     --namespace kube-system -f values.yaml
 } > "${OUT}"
 
-# Catch the two mistakes that really hurt on Talos.
-crd_count="$(grep -c '^kind: CustomResourceDefinition' "${OUT}")"
-[ "${crd_count}" -gt 10 ] || { echo "too few CRDs (${crd_count})" >&2; exit 1; }
-grep -q 'ciliumnetworkpolicies' "${OUT}" || { echo "ciliumnetworkpolicies is missing" >&2; exit 1; }
-grep -q 'enable-host-legacy-routing: "true"' "${OUT}" || {
-  echo "enable-host-legacy-routing is missing; on Talos DNS does not work without it" >&2; exit 1; }
-grep -q 'ipam: "kubernetes"' "${OUT}" || { echo "ipam is not set to kubernetes" >&2; exit 1; }
-if grep -q "SYS_MODULE" "${OUT}"; then
-  echo "SYS_MODULE is still in the capabilities; Talos refuses that" >&2; exit 1
-fi
-
-echo "   ${OUT}: ${crd_count} CRDs, $(wc -l < "${OUT}") lines"
-echo "done"
+# Same checks as `--check` runs, this time on what we just rendered.
+safety_checks "${OUT}"

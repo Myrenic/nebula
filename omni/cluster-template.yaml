@@ -20,15 +20,30 @@
 kind: Cluster
 name: talos-default
 kubernetes:
-  version: v1.36.3
+  # Keep these equal to what the machines actually run - check with
+  # `kubectl get nodes -o wide` - because Omni resets the machine config to this
+  # template, and a number that lags reality means a sync tries to take a
+  # running cluster backwards. They read v1.36.3 / v1.13.8 until 2026-10-02,
+  # while the cluster was already on v1.37.0 / v1.14.1; that is the drift this
+  # comment exists to prevent. Upgrade the numbers here deliberately, then sync.
+  #
+  # Omni holds the live spec and can be ahead of git, so reconcile before
+  # syncing rather than after:
+  #
+  #   omnictl cluster template diff --file omni/cluster-template.yaml
+  version: v1.37.0
   manifests:
     # Cilium is the CNI. Flannel is turned off by the patch below.
-    # one-time: Omni applies this once; Cilium manages itself after that.
+    # one-time: Omni applies this once; Cilium manages itself after that - which
+    # also means a regenerated cilium/cilium-install.yaml does NOT reach the
+    # cluster on its own. Upgrading Cilium is `./generate.sh`, then applying the
+    # new manifest to the running cluster by hand (`kubectl apply -f`), and only
+    # a fresh machine gets the new file from here. See docs/cluster.md.
     - name: cilium
       file: cilium/cilium-install.yaml
       mode: one-time
 talos:
-  version: v1.13.8
+  version: v1.14.1
 ---
 kind: ControlPlane
 machines:

@@ -29,6 +29,16 @@ cgroup:
 bpf:
   hostLegacyRouting: true
 
+# One agent at a time, on a three-node cluster. The chart's default is
+# maxUnavailable: 2, which on three nodes means a restart of the CNI takes two of
+# three agents down simultaneously - a self-inflicted outage during any upgrade,
+# and the reason a certificate rotation here would be a cluster-wide event
+# instead of a node-by-node one. One at a time is slower and boring.
+updateStrategy:
+  type: RollingUpdate
+  rollingUpdate:
+    maxUnavailable: 1
+
 securityContext:
   capabilities:
     ciliumAgent:
