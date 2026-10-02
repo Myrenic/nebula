@@ -1,5 +1,5 @@
-# Traefik CRDs, vendored from the upstream v3.7.0 documentation bundle:
-#   https://raw.githubusercontent.com/traefik/traefik/v3.7.0/docs/content/reference/dynamic-configuration/kubernetes-crd-definition-v1.yml
+# Traefik CRDs, vendored from the upstream v3.7.13 documentation bundle:
+#   https://raw.githubusercontent.com/traefik/traefik/v3.7.13/docs/content/reference/dynamic-configuration/kubernetes-crd-definition-v1.yml
 #
 # Vendored on purpose, same as the Cilium CRDs in omni/cilium/:
 #   * the version now moves with the traefik image in
@@ -9,7 +9,6 @@
 #     every reconcile of the root Kustomization.
 #
 # Update: bump the tag in the URL above to the tag of the running image and
-# re-download. Keep the file together with the image bump in one commit.
 apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
@@ -1178,6 +1177,14 @@ spec:
                   This middleware returns a custom page in lieu of the default, according to configured ranges of HTTP Status codes.
                   More info: https://doc.traefik.io/traefik/v3.7/reference/routing-configuration/http/middlewares/errorpages/
                 properties:
+                  errorRequestHeaders:
+                    description: |-
+                      ErrorRequestHeaders defines the list of request headers forwarded to the error page service.
+                      When nil (not set), all original request headers are forwarded.
+                      Set to an empty list to forward no headers, or list specific headers to forward only those.
+                    items:
+                      type: string
+                    type: array
                   query:
                     description: |-
                       Query defines the URL for the error page (hosted by service).

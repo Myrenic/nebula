@@ -10,6 +10,21 @@ spec:
   entryPoints:
     - websecure
   routes:
+    # The admin console is not part of the public surface. Everything else on
+    # this host has to answer a browser that has no session yet - that is what
+    # an identity provider is for - but /admin is only ever used by a human who
+    # already holds the admin credentials, and that human is on the LAN. Every
+    # other console in this cluster (grafana, longhorn, traefik, flux) is behind
+    # SSO or this gate; the highest-value login in the cluster should not be the
+    # one exception. Traefik prefers the longer rule, so this wins for /admin.
+    - match: Host(`keycloak.${SECRET_DOMAIN_0}`) && PathPrefix(`/admin`)
+      kind: Rule
+      middlewares:
+        - name: lan-only
+      services:
+        - name: keycloak
+          namespace: auth
+          port: 8080
     - match: Host(`keycloak.${SECRET_DOMAIN_0}`)
       kind: Rule
       services:

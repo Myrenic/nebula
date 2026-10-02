@@ -44,7 +44,11 @@ spec:
             - --providers.kubernetescrd
             - --providers.kubernetescrd.allowCrossNamespace=true
             - --accesslog=true
-            - --accesslog.filters.statuscodes=400-429
+            # 4xx-only was too narrow: every 5xx - the upstream failures this
+            # cluster actually debugs - was filtered out of the access log,
+            # which made the filter look like a deliberate error-only choice
+            # while hiding the errors that matter most.
+            - --accesslog.filters.statuscodes=400-599
             - --accesslog.format=json
             # /ping on the internal traefik port (8080) so the probes can tell
             # whether Traefik is actually alive. There were no probes at all
@@ -85,6 +89,21 @@ spec:
             allowPrivilegeEscalation: false
             capabilities:
               drop: ["ALL"]
-            runAsNonRoot: false
+            # This was runAsNonRoot: false with the rationale that Traefik binds
+            # :80 and :443. It does not need root for that: Kubernetes sets
+            # net.ipv4.ip_unprivileged_port_start=0 in every pod netns (checked
+            # in the running pod), and the image has nobody (65534) with no
+            # dedicated traefik account. The ingress pod is the one exposed to
+            # untrusted input, so it is the last place to leave root.
+            runAsNonRoot: true
+            runAsUser: 65534
+            runAsGroup: 65534
+            readOnlyRootFilesystem: true
             seccompProfile:
               type: RuntimeDefault
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}

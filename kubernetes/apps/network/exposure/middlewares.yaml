@@ -57,7 +57,20 @@ spec:
       - name: oauth2-proxy-forwardauth
 
 ---
-# Restricts access to RFC1918 LAN source addresses only
+# Restricts access to RFC1918 LAN source addresses only.
+#
+# The ranges are deliberately the whole of RFC1918 rather than this LAN's own
+# subnets (10.0.50.0/24 for the infrastructure, 10.0.100.0/24 for clients).
+# Two reasons, both real: the LAN is segmented into per-VLAN /24s inside
+# 10.0.0.0/8 and devices move between them, so enumerating subnets is a list
+# that goes stale silently; and the VPN hands out 192.168.x addresses, so its
+# clients are on this middleware by design and would be locked out by a
+# narrower list.
+#
+# What this is NOT is an internet boundary. If anything ever DNATs :443 from the
+# WAN to the Traefik VIP (10.0.50.4), the forwarded source is still RFC1918 and
+# this middleware would pass it. That is a router decision, not a Traefik one,
+# and it is the reason this is called lan-only and not authenticated.
 apiVersion: traefik.io/v1alpha1
 kind: Middleware
 metadata:

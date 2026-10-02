@@ -4,7 +4,13 @@ metadata:
   name: aiostreams
   namespace: network
   annotations:
-    # Public by design: Stremio addon URLs are fetched by media clients that cannot do OIDC.
+    # Public by design, and gated by the app rather than by a proxy: Stremio
+    # media clients fetch addon URLs and cannot do an OIDC dance, so the addon
+    # answers with its own credentials instead (`AIOSTREAMS_AUTH*` and
+    # `AIOSTREAM_ADDON_PASSWORD` in cluster-secrets, `AIOSTREAMS_AUTH_REQUIRED:
+    # "true"` in the HelmRelease). "The client cannot do OIDC" on its own would
+    # not be a reason to publish anything - the reason here is that the app has
+    # its own gate.
     testlab.io/exposure: public
 spec:
   entryPoints:

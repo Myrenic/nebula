@@ -20,3 +20,12 @@ spec:
         name: cluster-secrets
   dependsOn:
     - name: cert-manager-issuers
+  # The routes are useless until the wildcard certificate they all name has
+  # been issued, and on a cold rebuild they are applied seconds before it is.
+  # Without this the cluster serves a missing certificate and says nothing.
+  wait: true
+  healthChecks:
+    - apiVersion: cert-manager.io/v1
+      kind: Certificate
+      name: domain-0-prod
+      namespace: network
