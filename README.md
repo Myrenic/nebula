@@ -318,11 +318,16 @@ flux get kustomizations --status-selector ready=false
   Keycloak is the authentication path for everything behind `oauth2-proxy-auth`;
   the routes marked public answer with their own accounts or with none. Identity
   arrives as oauth2-proxy's headers, never from the client.
-- **The forge is not in the cluster.** It runs as an LXC on the Proxmox host
-  (`pve`, `10.0.50.11`), reached at `code.${SECRET_DOMAIN_0}`; its theme and notes
-  live in the `mtuntelder/forge` repository on it. Nothing here deploys it - the
-  in-cluster Forgejo it replaced could not host the repository the cluster
-  converges from, which is why it went.
+- **The forge is not in the cluster.** It runs on the Proxmox host (`pve`,
+  `10.0.50.11`) in LXC 114, reached at `code.${SECRET_DOMAIN_0}`. Its compose,
+  theme and deploy step live in `mtuntelder/forge-stack` on the forge itself, and a
+  systemd timer deploys them (`git pull` -> theme sync -> `compose pull && up`);
+  a Renovate PR that bumps the pinned Forgejo tag is the whole upgrade. CI runs in
+  **LXC 115**, a separate guest, registered as the `self-hosted` Actions runner -
+  kept apart so a job never executes beside the instance that holds the
+  repositories. Nothing here deploys any of it: the in-cluster Forgejo this
+  replaced could not host the repository the cluster converges from, which is why
+  it went.
 - **The sign-in pages are themed from git as well.**
   `kubernetes/apps/auth/keycloak/base/theme/` holds a `theme.properties` and one
   stylesheet, shipped as the `keycloak-theme` ConfigMap and mounted file by file

@@ -1,0 +1,14 @@
+[extend]
+# Keep the built-in rule set; a config file otherwise replaces it entirely.
+useDefault = true
+
+# Allowlists for this repository. Keep every entry narrow and say why.
+[[allowlists]]
+description = "The Keycloak chart's KC_DB_URL is a jdbc: URL, not a credential (it reads the whole URL as one)"
+paths = ['''kubernetes/apps/auth/keycloak/base/helmrelease\.yaml$''']
+targetRules = ["generic-api-key"]
+
+[[allowlists]]
+description = "SOPS-encrypted files: the values are ciphertext, the Secret shape is not"
+paths = ['''\.sops\.ya?ml$''']
+targetRules = ["kubernetes-secret-yaml"]
