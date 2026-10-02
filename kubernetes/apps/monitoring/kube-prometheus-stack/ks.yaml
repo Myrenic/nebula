@@ -23,6 +23,13 @@ spec:
     provider: sops
     secretRef:
       name: sops-age
+  # Prometheus and Alertmanager both persist onto `longhorn-2-replicas`, so this
+  # Kustomization has the same first-install race the Loki one had: without the
+  # dependency both StatefulSets come up against a StorageClass that may not exist
+  # yet and the HelmRelease reports failed instead of waiting for storage.
+  dependsOn:
+    - name: longhorn
+      namespace: flux-system
   wait: true
   healthChecks:
     - apiVersion: helm.toolkit.fluxcd.io/v2

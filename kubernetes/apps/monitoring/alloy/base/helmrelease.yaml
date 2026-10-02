@@ -1,0 +1,226 @@
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: alloy
+spec:
+  interval: 1h
+  chart:
+    spec:
+      chart: alloy
+      # Promtail's end-of-life date is 2026-03-02 and this cluster runs it today;
+      # Alloy is its replacement. 1.13.0 is the newest chart in
+      # grafana.github.io/helm-charts at the time of writing (chart 1.13.0 ships
+      # Alloy v1.20.0).
+      version: 1.13.0
+      sourceRef:
+        kind: HelmRepository
+        name: grafana
+      interval: 15m
+  install:
+    remediation:
+      retries: 3
+  upgrade:
+    remediation:
+      retries: 3
+  values:
+    # The config below is the promtail chart's default `kubernetes-pods` scrape
+    # config translated rule for rule, so the Loki streams keep the labels they
+    # have today (namespace, pod, container, app, instance, component and
+    # job = "<namespace>/<app>") and the same CRI parsing.
+    alloy:
+      # Mounted from the host below; the default is the container filesystem, and
+      # with readOnlyRootFilesystem that would not be writable.
+      storagePath: /tmp/alloy
+      configMap:
+        content: |-
+          // Delivery. The URL is the one the promtail config used. Loki runs with
+          // auth_enabled: false, so there is no tenant to set and no
+          // X-Scope-OrgID header to send.
+          loki.write "default" {
+            endpoint {
+              url = "http://loki.monitoring.svc.cluster.local:3100/loki/api/v1/push"
+            }
+          }
+
+          discovery.kubernetes "pods" {
+            role = "pod"
+            // Only this node's pods. Log files are read through hostPath /var/log,
+            // so the rest of the cluster's pods could never be read here and
+            // watching them is pure load. The chart sets HOSTNAME from
+            // spec.nodeName.
+            selectors {
+              role  = "pod"
+              field = "spec.nodeName=" + coalesce(sys.env("HOSTNAME"), constants.hostname)
+            }
+          }
+
+          discovery.relabel "pods" {
+            targets = discovery.kubernetes.pods.targets
+
+            // Promtail's relabel_configs, in the same order - order matters here,
+            // a later rule reads labels an earlier one set.
+            //
+            // `app` is the first of app.kubernetes.io/name, app, the controller
+            // name with its generated suffix stripped, or the pod name.
+            rule {
+              source_labels = ["__meta_kubernetes_pod_controller_name"]
+              regex         = "([0-9a-z-.]+?)(-[0-9a-f]{8,10})?"
+              target_label  = "__tmp_controller_name"
+            }
+            rule {
+              source_labels = ["__meta_kubernetes_pod_label_app_kubernetes_io_name", "__meta_kubernetes_pod_label_app", "__tmp_controller_name", "__meta_kubernetes_pod_name"]
+              regex         = "^;*([^;]+)(;.*)?$"
+              target_label  = "app"
+            }
+            rule {
+              source_labels = ["__meta_kubernetes_pod_label_app_kubernetes_io_instance", "__meta_kubernetes_pod_label_instance"]
+              regex         = "^;*([^;]+)(;.*)?$"
+              target_label  = "instance"
+            }
+            rule {
+              source_labels = ["__meta_kubernetes_pod_label_app_kubernetes_io_component", "__meta_kubernetes_pod_label_component"]
+              regex         = "^;*([^;]+)(;.*)?$"
+              target_label  = "component"
+            }
+            rule {
+              source_labels = ["__meta_kubernetes_pod_node_name"]
+              target_label  = "node_name"
+            }
+            rule {
+              source_labels = ["__meta_kubernetes_namespace"]
+              target_label  = "namespace"
+            }
+            rule {
+              source_labels = ["namespace", "app"]
+              separator     = "/"
+              target_label  = "job"
+            }
+            rule {
+              source_labels = ["__meta_kubernetes_pod_name"]
+              target_label  = "pod"
+            }
+            rule {
+              source_labels = ["__meta_kubernetes_pod_container_name"]
+              target_label  = "container"
+            }
+            rule {
+              source_labels = ["__meta_kubernetes_pod_uid", "__meta_kubernetes_pod_container_name"]
+              separator     = "/"
+              replacement   = "/var/log/pods/*$1/*.log"
+              target_label  = "__path__"
+            }
+            // Second path rule, for pods whose directory is named after the
+            // kubelet config hash (static pods). Kept although it reads oddly, so
+            // that the collected set of files is exactly promtail's.
+            rule {
+              source_labels = ["__meta_kubernetes_pod_annotationpresent_kubernetes_io_config_hash", "__meta_kubernetes_pod_annotation_kubernetes_io_config_hash", "__meta_kubernetes_pod_container_name"]
+              separator     = "/"
+              regex         = "true/(.*)"
+              replacement   = "/var/log/pods/*$1/*.log"
+              target_label  = "__path__"
+            }
+          }
+
+          loki.source.file "pods" {
+            targets    = discovery.relabel.pods.output
+            forward_to = [loki.process.pods.receiver]
+
+            // The relabel rules above build glob paths
+            // (/var/log/pods/*<uid>/<container>/*.log); loki.source.file only
+            // expands them when file discovery is switched on.
+            file_match {
+              enabled = true
+            }
+          }
+
+          loki.process "pods" {
+            forward_to = [loki.write.default.receiver]
+
+            // Promtail's only pipeline stage, kept: without it the CRI timestamp
+            // and stream prefix stays in the message body.
+            stage.cri {}
+          }
+      mounts:
+        varlog: true
+        extra:
+          - name: storage
+            mountPath: /tmp/alloy
+      resources:
+        requests:
+          cpu: 50m
+          memory: 128Mi
+        limits:
+          cpu: 500m
+          memory: 512Mi
+      # Mirrors the promtail container this replaces, which ran with
+      # readOnlyRootFilesystem, dropped ALL capabilities and no privilege
+      # escalation, plus an explicit seccomp profile. The writable path is the
+      # storage mount.
+      securityContext:
+        allowPrivilegeEscalation: false
+        capabilities:
+          drop:
+            - ALL
+        readOnlyRootFilesystem: true
+        seccompProfile:
+          type: RuntimeDefault
+    global:
+      # uid 0, unlike everything else in this namespace, because the collector reads
+      # /var/log/pods through hostPath and those files are root-owned: the promtail
+      # DaemonSet this replaces runs as uid 0 for the same reason, and Alloy's own
+      # documentation says file-based pod log collection requires system privileges.
+      # The `monitoring` namespace enforces the privileged level for exactly this
+      # class of workload (node-exporter).
+      podSecurityContext:
+        runAsUser: 0
+        runAsGroup: 0
+        fsGroup: 0
+    controller:
+      volumes:
+        extra:
+          - name: storage
+            hostPath:
+              # Positions survive a container restart on the same node, as they did
+              # under promtail's /run/promtail. DirectoryOrCreate rather than an
+              # unset type so the mount cannot fail on a node where the directory
+              # does not exist yet.
+              path: /run/alloy
+              type: DirectoryOrCreate
+      # The control-plane nodes carry no taints today, but they are the only nodes
+      # this cluster has and they are Omni-managed: if a taint appears, every log
+      # stream in the cluster stops without a single pod moving.
+      tolerations:
+        - effect: NoSchedule
+          key: node-role.kubernetes.io/master
+          operator: Exists
+        - effect: NoSchedule
+          key: node-role.kubernetes.io/control-plane
+          operator: Exists
+    # One container instead of two. With the reloader off the chart stamps a
+    # checksum of the config onto the pod template, so a config change rolls the
+    # DaemonSet - which is how the promtail DaemonSet behaved as well.
+    configReloader:
+      enabled: false
+    # Nothing in this config uses the PodLogs CRD (loki.source.podlogs does), and
+    # this release is the only thing that would install it.
+    crds:
+      create: false
+    rbac:
+      create: true
+      # Namespaced rules cut to what this config actually calls:
+      # discovery.kubernetes with role pod. The chart's defaults also grant read on
+      # secrets, configmaps and events cluster-wide, for components that are not in
+      # this config.
+      rules:
+        - apiGroups: [""]
+          resources: ["pods"]
+          verbs: ["get", "list", "watch"]
+      # Node read is not needed by this config, but clusterRules cannot be emptied:
+      # the chart renders an empty list into invalid YAML (verified against
+      # chart 1.13.0). Naming it here keeps the cluster-scoped grant to `nodes`
+      # instead of the chart's default nodes + nodes/pods + nodes/metrics +
+      # nonResourceURL /metrics.
+      clusterRules:
+        - apiGroups: [""]
+          resources: ["nodes"]
+          verbs: ["get", "list", "watch"]

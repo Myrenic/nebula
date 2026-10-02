@@ -25,3 +25,22 @@ spec:
           annotations:
             summary: Ingress endpoint is failing health probes
             description: The ingress target {{ $labels.instance }} has failed HTTPS probes for at least 10 minutes.
+        - alert: IngressHealthDiscoveryStale
+          # The Probe object is owned by the discovery CronJob, not by git, so when
+          # discovery stops the last target list keeps being probed and the two
+          # rules above stay quiet - a decommissioned or renamed host simply stops
+          # being checked and nothing says so. An hour is four missed runs of the
+          # 15-minute schedule, which covers a slow or retried run.
+          expr: |-
+            time() - kube_cronjob_status_last_successful_time{namespace="monitoring", cronjob="ingress-health-discovery"} > 3600
+            or
+            absent(kube_cronjob_status_last_successful_time{namespace="monitoring", cronjob="ingress-health-discovery"})
+          for: 15m
+          labels:
+            severity: warning
+          annotations:
+            summary: Ingress health discovery has stopped succeeding
+            description: >-
+              The ingress-health-discovery CronJob has not completed a successful
+              run in over an hour, so the ingress-health Probe is frozen on its old
+              target list and new ingresses are never probed.

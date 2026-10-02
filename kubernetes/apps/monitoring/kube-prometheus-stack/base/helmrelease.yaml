@@ -98,13 +98,29 @@ spec:
             - receiver: "null"
               matchers:
                 - alertname =~ "Watchdog|InfoInhibitor"
+            # These are the kube-prometheus-stack chart's own severity: info rules,
+            # not this repo's, and they are informational by the chart's choice:
+            # KubeNodePressure and KubeletTooManyPods fire on a cluster that is
+            # merely busy, KubeNodeEviction has `for: 0s` so any single eviction
+            # messages, and the quota/CPU ones are capacity trivia. Delivering
+            # `info` is what makes ClusterOverprovisioned reachable, so the fix is
+            # to name the chatty chart rules rather than to stop delivering info.
+            # It is a list of the chart's rules exactly, so a chart bump that adds
+            # another info rule is a thing to re-check here; anything this repo
+            # writes at info level is delivered.
+            - receiver: "null"
+              matchers:
+                - alertname =~ "KubeQuotaAlmostFull|KubeQuotaFullyUsed|CPUThrottlingHigh|KubeNodePressure|KubeletTooManyPods|KubeNodeEviction|NodeCPUHighUsage"
             # Warnings used to fall through to the "null" receiver and were
             # silently dropped, so every severity: warning rule in this repo
             # (node pressure, missing ingress probes, ...) could never notify
-            # anyone.
+            # anyone. `info` was the same hole one level down: the local
+            # ClusterOverprovisioned rule is severity: info with a 6-hour `for`,
+            # so the one signal that says "this cluster costs more than it uses"
+            # could never be delivered either.
             - receiver: telegram
               matchers:
-                - severity =~ "critical|warning"
+                - severity =~ "critical|warning|info"
         receivers:
           - name: "null"
           - name: telegram
@@ -112,12 +128,26 @@ spec:
               - bot_token_file: /etc/alertmanager/secrets/telegram-notification/token
                 chat_id: 783908316
                 parse_mode: HTML
-                send_resolved: false
+                # Resolved notifications on purpose. This chat has no silence or
+                # acknowledgement step, so with send_resolved false the last
+                # message about an alert is the firing one and a cleared incident
+                # reads as still open; the alternative would be a comment telling
+                # the reader that silence means resolved, which nobody reads at
+                # 3am.
+                send_resolved: true
     prometheus:
       enabled: true
       prometheusSpec:
         replicas: 1
         retention: 7d
+        # 7 days on a 10Gi volume was a wish, not a bound: measured on
+        # 2026-10-02 the TSDB volume was at 9.73GiB of 10GiB (97%), so this was
+        # already the state where the next block fails to write and Prometheus
+        # loses exactly the recent data retention was meant to keep. 8GiB leaves
+        # the WAL and compaction about 2GiB of the 10Gi and makes size, not just
+        # time, the thing that trims. The volume is deliberately not grown: it is
+        # on `longhorn-2-replicas`, so +5Gi costs 10GiB of real disk.
+        retentionSize: 8GiB
         # Without this Prometheus runs on an emptyDir: 7 days of retention is
         # lost on every pod restart, host reboot included.
         storageSpec:

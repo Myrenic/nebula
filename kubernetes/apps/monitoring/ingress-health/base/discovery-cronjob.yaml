@@ -38,9 +38,17 @@ data:
 
       # Primary parser: Host(`...`) clauses from Traefik match expressions.
       HOST_CLAUSES="$(printf '%s\n' "${MATCH_EXPRESSION}" | grep -oE 'Host\([^)]*\)' || true)"
-      # Fallback parser: recover domain-like tokens if Host(...) extraction misses.
+      # Fallback parser: a matcher that is nothing but a bare domain, e.g.
+      # `api.example.com`. Anchored to the whole expression on purpose. The previous
+      # version grepped any domain-looking token out of arbitrary text, so
+      # PathPrefix(`/foo.bar`) and HostRegexp(`^a\.example\.com$`) invented probe
+      # targets for hosts that do not exist - and once invented they are probed
+      # forever, because the Probe is only ever rewritten from this list.
       if [[ -z "${HOST_CLAUSES}" ]]; then
-        HOST_CLAUSES="$(printf '%s\n' "${MATCH_EXPRESSION}" | grep -oE '[A-Za-z0-9.-]+\.[A-Za-z]{2,}' || true)"
+        BARE_MATCH="$(printf '%s' "${MATCH_EXPRESSION}" | sed -E 's/[`"[:space:]]//g')"
+        if [[ "${BARE_MATCH}" =~ ^[A-Za-z0-9.-]+\.[A-Za-z]{2,}$ ]]; then
+          HOST_CLAUSES="${BARE_MATCH}"
+        fi
       fi
 
       while IFS= read -r CLAUSE; do

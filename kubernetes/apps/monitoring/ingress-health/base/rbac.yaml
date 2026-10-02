@@ -5,6 +5,9 @@ metadata:
   namespace: monitoring
 
 ---
+# Cluster-wide read on Traefik's route table, and nothing else. The job has to see
+# IngressRoutes in every namespace to build the target list, so this part genuinely
+# cannot be namespaced.
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
@@ -13,9 +16,6 @@ rules:
   - apiGroups: ["traefik.io"]
     resources: ["ingressroutes"]
     verbs: ["get", "list", "watch"]
-  - apiGroups: ["monitoring.coreos.com"]
-    resources: ["probes"]
-    verbs: ["get", "list", "watch", "create", "update", "patch"]
 
 ---
 apiVersion: rbac.authorization.k8s.io/v1
@@ -25,6 +25,35 @@ metadata:
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
+  name: ingress-health-discovery
+subjects:
+  - kind: ServiceAccount
+    name: ingress-health-discovery
+    namespace: monitoring
+
+---
+# Probe writes are namespace-scoped. The job writes exactly one Probe, into
+# `monitoring`; cluster-wide create/update/patch let it rewrite any other
+# Prometheus Operator Probe in the cluster, which no part of the script needs.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: ingress-health-discovery
+  namespace: monitoring
+rules:
+  - apiGroups: ["monitoring.coreos.com"]
+    resources: ["probes"]
+    verbs: ["get", "list", "watch", "create", "update", "patch"]
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: ingress-health-discovery
+  namespace: monitoring
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
   name: ingress-health-discovery
 subjects:
   - kind: ServiceAccount

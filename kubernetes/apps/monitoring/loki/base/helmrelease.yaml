@@ -44,11 +44,30 @@ spec:
         retention_enabled: true
         delete_request_store: filesystem
         working_directory: /var/loki/compactor
+    # Same load-bearing label as the Velero ServiceMonitor: Prometheus here selects
+    # ServiceMonitors by `release: kube-prometheus-stack` (confirmed on the live
+    # Prometheus CR, spec.serviceMonitorSelector.matchLabels), so a ServiceMonitor
+    # without it is created, looks healthy and is never scraped.
+    monitoring:
+      serviceMonitor:
+        enabled: true
+        labels:
+          release: kube-prometheus-stack
     singleBinary:
       replicas: 1
       persistence:
         enabled: true
-        storageClass: longhorn
+        # 2 replicas, the same durability choice Prometheus and Alertmanager already
+        # make. Loki's store here is a filesystem TSDB on this one PVC, so at the
+        # 1-replica `longhorn` class a single disk loss takes 14 days of logs with it
+        # - and the logs are the evidence of whatever failed. `longhorn` stays the
+        # class for reclaimable data that is rebuilt rather than restored.
+        #
+        # storageClass is immutable on a StatefulSet's volumeClaimTemplate, so on an
+        # existing release this needs the Loki StatefulSet deleted and `storage-loki-0`
+        # removed before it takes effect - the StatefulSet reuses an existing PVC and
+        # would otherwise keep reporting the old class.
+        storageClass: longhorn-2-replicas
         accessModes:
           - ReadWriteOnce
         size: 20Gi

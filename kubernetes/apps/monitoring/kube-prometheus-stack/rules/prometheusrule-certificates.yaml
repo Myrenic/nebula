@@ -1,0 +1,47 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: certificate-health
+  labels:
+    release: kube-prometheus-stack
+spec:
+  groups:
+    - name: cert-manager-certificate-health
+      rules:
+        # Everything on this cluster terminates one wildcard certificate from one
+        # Cloudflare DNS-01 ClusterIssuer, so a certificate that fails to renew is
+        # a whole-cluster outage, not a per-host one - and nothing was watching it.
+        - alert: CertificateExpiringSoon
+          # 21 days, not "whenever it expires": cert-manager renews at renewBefore,
+          # which defaults to two thirds of the lifetime (~30 days before expiry
+          # for a 90-day Let's Encrypt certificate). At 21 days the renewal is
+          # already nine days overdue, which leaves time to look at the issuer
+          # before the ingress certificates and the ACME account stop working.
+          expr: (certmanager_certificate_expiration_timestamp_seconds - time()) < 21 * 24 * 3600
+          for: 1h
+          labels:
+            severity: critical
+          annotations:
+            summary: Certificate expires within 21 days
+            description: >-
+              Certificate {{ $labels.namespace }}/{{ $labels.name }} issued by
+              {{ $labels.issuer_kind }} {{ $labels.issuer_name }} expires in less
+              than 21 days and has not been renewed.
+        - alert: CertificateNotReady
+          # condition="True" is the only series that changes value. The endpoint
+          # exports one series per condition value (True/False/Unknown), each 0
+          # except the current one (verified against the live scrape:
+          # condition="False" and condition="Unknown" are permanently 0), so the
+          # bare `certmanager_certificate_ready_status == 0` this brief asked for
+          # would have matched those and fired forever.
+          expr: certmanager_certificate_ready_status{condition="True"} == 0
+          for: 15m
+          labels:
+            severity: critical
+          annotations:
+            summary: Certificate is not Ready
+            description: >-
+              Certificate {{ $labels.namespace }}/{{ $labels.name }} from
+              {{ $labels.issuer_kind }} {{ $labels.issuer_name }} has not been in
+              the Ready state for 15 minutes. If it is the wildcard certificate,
+              every ingress is serving a stale or absent certificate.
