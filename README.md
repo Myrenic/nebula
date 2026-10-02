@@ -320,7 +320,7 @@ flux get kustomizations --status-selector ready=false
   arrives as oauth2-proxy's headers, never from the client.
 - **The forge is not in the cluster.** It runs on the Proxmox host (`pve`,
   `10.0.50.11`) in LXC 114, reached at `code.${SECRET_DOMAIN_0}`. Its compose,
-  theme and deploy step live in `mtuntelder/forge` on the forge itself, and a
+  theme and deploy step live in `mtuntelder/forge-stack` on the forge itself, and a
   systemd timer deploys them (`git pull` -> theme sync -> `compose pull && up`);
   a Renovate PR that bumps the pinned Forgejo tag is the whole upgrade. CI runs in
   **LXC 115**, a separate guest, registered as the `self-hosted` Actions runner -
