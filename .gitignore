@@ -1,6 +1,23 @@
 # The age key that decrypts every *.sops.yaml in this repository. It belongs on the
-# machine that bootstraps the cluster, never in git.
-age.agekey
+# machine that bootstraps the cluster, never in git. The patterns cover the names it
+# gets copied around as - age.agekey, age.agekey.bak, backup.agekey - because
+# ignoring only the literal `age.agekey` leaves the backup of the one file that
+# decrypts the whole cluster still committable.
+age.agekey*
+*.agekey
+
+# Environment files, which is where a value gets pasted while debugging.
+.env*
+
+# Cluster credentials that end up in a working directory: kubeconfigs, and the key
+# material cert-manager and Velero hand out. Nothing tracked today matches these,
+# so this is a safety net, not a rule about the repository's layout.
+*.kubeconfig
+kubeconfig
+*.pem
+*.key
+*.p12
+*.pfx
 
 # Node dependencies of the app repositories that used to live here; harmless if one
 # is ever cloned into a subdirectory.

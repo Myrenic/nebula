@@ -12,3 +12,26 @@ targetRules = ["generic-api-key"]
 description = "SOPS-encrypted files: the values are ciphertext, the Secret shape is not"
 paths = ['''\.sops\.ya?ml$''']
 targetRules = ["kubernetes-secret-yaml"]
+
+# The Forgejo workflows carry no credential of their own - only clone URLs of the
+# form `http://oauth2:${GITHUB_TOKEN}@<host>/...`, where the token is a shell
+# variable. They are scanned as part of the tree (`gitleaks dir` walks every file,
+# not just `.github/`), and they pass without an allowlist entry, so none was
+# added: an allowlist that is not needed is a blind spot nobody asked for.
+
+# Known, and not catchable by anything in this file: the Cilium CA private key and
+# the Hubble server certificate key were committed - the `tls.auto.method: helm`
+# default baked them into the rendered Cilium manifest - and they are in the
+# history of BOTH hosts, including the old public GitHub mirror. `gitleaks dir`
+# scans the tree as it lands and never the past, so it cannot see them and no
+# config here would change that.
+#
+# The keys were ROTATED IN THE CLUSTER on 2026-10-02: a new CA was generated
+# in-cluster and the agent DaemonSet and hubble-relay were restarted onto it, so
+# the leaked key no longer opens anything. Removing it from history is issue #38
+# (https://code.tuntelder.com/mtuntelder/nebula/issues/38) and is a rewrite of
+# both remotes plus every clone - on the public mirror it cannot be undone at all,
+# which is why rotation, not deletion, was the thing that mattered.
+#
+# The procedure and the verification commands are in
+# docs/runbooks/cilium-upgrades.md.

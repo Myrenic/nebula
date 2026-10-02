@@ -27,5 +27,8 @@ ignore: |
   # linter is not a trade worth making.
   **/*.sops.yaml
   # Workflows are written in GitHub's own convention, which uses flow-style
-  # maps and sequences; the indentation rule would trip on them.
+  # maps and sequences; the indentation rule would trip on them. Both hosts are
+  # listed: with only .github here, `on:` in the Forgejo workflows tripped the
+  # truthy rule and failed the whole gate suite.
   .github/workflows/**
+  .forgejo/workflows/**

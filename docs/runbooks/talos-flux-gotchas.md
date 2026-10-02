@@ -72,3 +72,8 @@ Note that `velero_schedule_expected_interval_seconds` does not exist - the previ
 staleness rule divided by it and could therefore never fire, which is part of why
 the old failure went unnoticed. The current rule writes each schedule's expected
 period out instead.
+
+Neither trap has ever been closed by walking the path: no restore has been run from one
+of these backups, which is
+[known-issues.md §5](../known-issues.md#5-the-velero-restore-path-is-documented-as-drilled-but-has-never-been-run)
+and the last row of [`drill-log.md`](drill-log.md).

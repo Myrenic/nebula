@@ -10,23 +10,29 @@ on:
   pull_request:
     paths:
       - '.github/workflows/**'
+      - '.forgejo/**'
       - '.editorconfig'
+      - '.gitleaks.toml'
       - '.sops.yaml'
       - '.yamllint'
       - 'kubernetes/**'
       - 'omni/**'
       - 'README.md'
+      - 'renovate.json'
       - 'scripts/**'
   push:
     branches: [main]
     paths:
       - '.github/workflows/**'
+      - '.forgejo/**'
       - '.editorconfig'
+      - '.gitleaks.toml'
       - '.sops.yaml'
       - '.yamllint'
       - 'kubernetes/**'
       - 'omni/**'
       - 'README.md'
+      - 'renovate.json'
       - 'scripts/**'
 
 permissions:
@@ -41,21 +47,45 @@ jobs:
     name: Gates
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      # Every third-party action is pinned to a commit SHA with its version in a
+      # trailing comment: a tag is mutable, and these actions run with the
+      # repository's contents and its token. Renovate keeps the comments current.
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
-      - uses: azure/setup-kubectl@v4
+      - uses: azure/setup-kubectl@776406bce94f63e41d621b960d78ee25c8b76ede # v4
         with:
           version: v1.36.3
 
-      # Pinned so CI uses the same releases a maintainer installs locally.
+      # Pinned so CI uses the same releases a maintainer installs locally, and
+      # verified against a published digest so a truncated or swapped download
+      # cannot become the thing that decides whether a manifest passes.
       - name: Install yamllint and kubeconform
         run: |
+          set -euo pipefail
           python3 -m venv "$RUNNER_TEMP/yamllint"
-          "$RUNNER_TEMP/yamllint/bin/pip" install --quiet yamllint==1.38.0
+          # yamllint, pinned by version and checked against the sha256 PyPI
+          # publishes for that wheel (its JSON API). Bumping
+          # YAMLLINT_VERSION is the whole change; the digest follows the version,
+          # so a Renovate bump is a one-line pull request. yamllint's own
+          # dependencies (PyYAML, pathspec) come from PyPI's resolver.
+          YAMLLINT_VERSION=1.38.0
+          meta="$(curl -sSfL "https://pypi.org/pypi/yamllint/${YAMLLINT_VERSION}/json" \
+            | python3 -c 'import json,sys; u=json.load(sys.stdin)["urls"]; w=[x for x in u if x["filename"].endswith("-py3-none-any.whl")][0]; print(w["digests"]["sha256"], w["url"])')"
+          yamllint_wheel="$RUNNER_TEMP/$(basename "$(printf '%s' "$meta" | cut -d' ' -f2)")"
+          curl -sSfL -o "$yamllint_wheel" "$(printf '%s' "$meta" | cut -d' ' -f2)"
+          echo "$(printf '%s' "$meta" | cut -d' ' -f1)  $yamllint_wheel" | sha256sum -c -
+          "$RUNNER_TEMP/yamllint/bin/pip" install --quiet "$yamllint_wheel"
           echo "$RUNNER_TEMP/yamllint/bin" >>"$GITHUB_PATH"
-          curl -sSfL -o "$RUNNER_TEMP/kubeconform.tar.gz" \
+          # kubeconform, verified against the CHECKSUMS file the release
+          # publishes rather than extracted unverified.
+          # The file name is kept as the release publishes it: the digest in
+          # CHECKSUMS is the one for that name, and sha256sum -c reads it from there.
+          curl -sSfL -o "$RUNNER_TEMP/kubeconform-linux-amd64.tar.gz" \
             https://github.com/yannh/kubeconform/releases/download/v0.7.0/kubeconform-linux-amd64.tar.gz
-          tar -xzf "$RUNNER_TEMP/kubeconform.tar.gz" -C "$RUNNER_TEMP" kubeconform
+          curl -sSfL -o "$RUNNER_TEMP/CHECKSUMS" \
+            https://github.com/yannh/kubeconform/releases/download/v0.7.0/CHECKSUMS
+          (cd "$RUNNER_TEMP" && grep '^[0-9a-f]*  kubeconform-linux-amd64\.tar\.gz$' CHECKSUMS | sha256sum -c -)
+          tar -xzf "$RUNNER_TEMP/kubeconform-linux-amd64.tar.gz" -C "$RUNNER_TEMP" kubeconform
           echo "$RUNNER_TEMP" >>"$GITHUB_PATH"
 
       - name: Validate

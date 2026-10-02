@@ -37,6 +37,34 @@ omnictl cluster template sync     --file omni/cluster-template.yaml
 Note: `validate` does **not** check whether the manifest files exist. Only
 `render` does that. If `render` passes, the path is right.
 
+### Before a sync, check the versions against the cluster
+
+`cluster template sync` makes the cluster match the template in *both* directions. If
+the template's `kubernetes.version` or `talos.version` is older than what the machines
+run, the sync does not sit quietly - it tries to move them back, one Talos minor at a
+time, and Omni's database migrations are not reversible. Read both sides first:
+
+```bash
+# What the template asks for.
+grep -nE '^(kubernetes|talos):|^  version:' omni/cluster-template.yaml
+
+# What the cluster reports: kubelet version and Talos image per node. Through
+# `-o json` and python, not jsonpath - see runbooks/talos-flux-gotchas.md.
+kubectl get nodes -o json | python3 -c 'import json,sys
+for n in json.load(sys.stdin)["items"]:
+    print(n["metadata"]["name"], n["status"]["nodeInfo"]["kubeletVersion"], n["status"]["nodeInfo"]["osImage"])'
+
+# And from the machine side, which is the side that actually moves (needs
+# OMNI_ENDPOINT and OMNI_SERVICE_ACCOUNT_KEY from above):
+talosctl -n <node-ip> version
+```
+
+`talosctl version` prints the *client* version as well - the node's is the one listed
+under the node's address. As of 2026-10-02 the cluster runs Kubernetes v1.37.0 and
+Talos v1.14.1, and the template in this repository says the same; how that drifted
+apart once, and what a sync against a stale template would have done, is
+[`known-issues.md` §4](known-issues.md#4-cluster-versions-can-drift-from-the-documentation-and-the-template).
+
 ### Converting an existing cluster (not just a bootstrap)
 
 On a fresh bootstrap with `cni: none` Flannel never appears. On an existing
@@ -93,12 +121,18 @@ After generating, `generate.sh` checks for `enable-host-legacy-routing`,
 
 ### Upgrading
 
+Regenerating the manifest is not the upgrade. The file is applied as a `mode: one-time`
+manifest, so a running cluster never sees a new copy of it by itself - the sync below
+only changes what a *new* machine gets. The full sequence, and the certificate half of
+it, is in [`runbooks/cilium-upgrades.md`](runbooks/cilium-upgrades.md):
+
 ```bash
 cd omni/cilium
 CILIUM_VERSION=1.20.3 ./generate.sh
 cd ../..
-git diff omni/cilium                    # look at what changes
-omnictl cluster template sync --file omni/cluster-template.yaml
+git diff omni/cilium                                            # look at what changes
+kubectl apply -f omni/cilium/cilium-install.yaml                # the running cluster
+omnictl cluster template sync --file omni/cluster-template.yaml # so a new machine gets it too
 ```
 
 ## Machines are not equal
@@ -267,6 +301,11 @@ key* (not a service account key), and it has to be registered again in Omni and
 pasted into `/root/proxmox-provider/docker-compose.yml`, which also still pins the
 provider image to `latest` (v0.3.0 is the current release).
 
+It runs on the Proxmox host and not in the cluster, so no alert rule can reach it;
+that, and the rest of the state of this defect, is
+[`known-issues.md` §1](known-issues.md#1-the-proxmox-infrastructure-provider-crash-loops-and-nothing-in-the-cluster-can-see-it)
+(tracked as [#34](https://code.tuntelder.com/mtuntelder/nebula/issues/34)).
+
 ### Draining a node that runs Longhorn replicas
 
 Omni drains a node before it reboots it for a Talos upgrade, and Longhorn's default
@@ -296,7 +335,10 @@ kubectl -n storage patch settings.longhorn.io node-drain-policy --type merge \
 Option B removes the cause: a second replica on the volumes that only have one. Today
 that is `frigate-media`, which the replica-adjuster deliberately skips, and it lives on
 the Intel-iGPU node - so it blocks every drain of that node on its own. A second
-replica costs disk and buys a drain that does not depend on the policy.
+replica costs disk and buys a drain that does not depend on the policy. That choice,
+and why the volume is excluded from the adjuster in the first place, is
+[`known-issues.md` §2](known-issues.md#2-frigate-media-has-one-replica-and-that-replica-blocks-every-drain-of-its-node)
+(tracked as [#35](https://code.tuntelder.com/mtuntelder/nebula/issues/35)).
 
 Either way the volumes on the node being rebooted are unavailable while it is down.
 That is expected, and Longhorn recovers them: after the reboot `frigate-media` came

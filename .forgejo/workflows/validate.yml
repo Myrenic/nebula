@@ -1,0 +1,67 @@
+name: validate
+
+# The real gate suite (scripts/validate.sh) on the canonical host, so a push to
+# main - which Flux reconciles - is held to the same rules a GitHub pull request
+# is, instead of the secret scan alone.
+#
+# Forgejo specifics, handled the same way .forgejo/workflows/gitleaks.yml handles
+# them:
+#   * the runner does not check the repository out, so the job fetches the commit
+#     that triggered the run (`GITHUB_SHA`) itself. Fetching the SHA rather than
+#     the branch is what makes a pull request validate the pull request and not
+#     the default branch.
+#   * the job runs in a pinned container, so the tools do not depend on what the
+#     runner host happens to have installed.
+#
+# The image is alpine/k8s, the same one the cluster's own jobs use (see
+# kubernetes/apps/storage/longhorn and kubernetes/apps/monitoring/ingress-health):
+# it already carries kubectl, git, python3, kubeconform and helm. validate.sh
+# needs yamllint on top, and it is installed at a pinned version. That install is
+# deliberately NOT wrapped in `|| true`: a gate that silently does not run is
+# worse than no gate, so if PyPI is unreachable the job must fail and be seen.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  validate:
+    runs-on: self-hosted
+    container:
+      image: alpine/k8s:1.37.1
+    steps:
+      - name: fetch the commit under test
+        run: |
+          set -eu
+          host="${GITHUB_SERVER_URL#*://}"
+          echo "validating ${GITHUB_REPOSITORY}@${GITHUB_SHA} from ${host}"
+          git init --quiet src
+          git -C src remote add origin "http://oauth2:${GITHUB_TOKEN}@${host}/${GITHUB_REPOSITORY}.git"
+          git -C src fetch --quiet --depth 1 origin "${GITHUB_SHA}"
+          git -C src checkout --quiet FETCH_HEAD
+          echo "files: $(git -C src ls-files | wc -l)"
+
+      - name: install yamllint
+        run: |
+          set -eu
+          # yamllint, pinned by version and checked against the sha256 PyPI
+          # publishes for that wheel (its JSON API), so a truncated or swapped
+          # download cannot become the linter that decides whether a manifest
+          # passes. Bumping YAMLLINT_VERSION is the whole change.
+          # Alpine's python is externally managed (PEP 668), hence the
+          # --break-system-packages flag: this is a throwaway job container.
+          YAMLLINT_VERSION=1.38.0
+          work="$(mktemp -d)"
+          meta="$(curl -sSfL "https://pypi.org/pypi/yamllint/${YAMLLINT_VERSION}/json" \
+            | python3 -c 'import json,sys; u=json.load(sys.stdin)["urls"]; w=[x for x in u if x["filename"].endswith("-py3-none-any.whl")][0]; print(w["digests"]["sha256"], w["url"])')"
+          yamllint_wheel="$work/$(basename "$(printf '%s' "$meta" | cut -d' ' -f2)")"
+          curl -sSfL -o "$yamllint_wheel" "$(printf '%s' "$meta" | cut -d' ' -f2)"
+          echo "$(printf '%s' "$meta" | cut -d' ' -f1)  $yamllint_wheel" | sha256sum -c -
+          pip3 install --quiet --no-cache-dir --break-system-packages "$yamllint_wheel"
+          yamllint --version
+
+      - name: gates
+        run: |
+          set -eu
+          bash src/scripts/validate.sh "$PWD/src"
