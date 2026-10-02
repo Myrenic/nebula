@@ -4,8 +4,8 @@ useDefault = true
 
 # Allowlists for this repository. Keep every entry narrow and say why.
 [[allowlists]]
-description = "The Keycloak chart's JDBC URL, read as a credential by generic-api-key"
-regexes = ['''jdbc:postgresql://[a-z0-9-]+:[0-9]+/[a-z0-9_]+''']
+description = "The Keycloak chart's KC_DB_URL is a jdbc: URL, not a credential (it reads the whole URL as one)"
+paths = ['''kubernetes/apps/auth/keycloak/base/helmrelease\.yaml$''']
 targetRules = ["generic-api-key"]
 
 [[allowlists]]
