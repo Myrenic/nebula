@@ -3,11 +3,17 @@
 # kubectl, git and python3:
 #
 #     scripts/check-manifests.sh
+#
+# With RENDER_OUT set to a path, every manifest it renders is also concatenated
+# there, so scripts/validate.sh can schema-check exactly the objects this walker
+# walked instead of rendering a second, possibly different, set.
 set -euo pipefail
 cd "$(git rev-parse --show-toplevel)"
 workdir="$(mktemp -d)"
 trap 'rm -rf "$workdir"' EXIT
 fail=0
+rendered_out="${RENDER_OUT:-}"
+if [ -n "$rendered_out" ]; then : >"$rendered_out"; fi
 
 # Phase 1: render every path the repo tells Flux to reconcile. Building
 # kubernetes/apps and kubernetes/bootstrap only covers the ks.yaml layer, where
@@ -16,6 +22,10 @@ fail=0
 echo '==> rendering Flux Kustomization paths'
 kubectl kustomize kubernetes/apps >"$workdir/apps.yaml" || {
   echo 'FAIL: kubectl kustomize kubernetes/apps' >&2; exit 1; }
+if [ -n "$rendered_out" ]; then
+  printf -- '---\n' >>"$rendered_out"
+  cat "$workdir/apps.yaml" >>"$rendered_out"
+fi
 
 python3 - "$workdir/apps.yaml" >"$workdir/paths.txt" <<'PY'
 import re, sys
@@ -40,7 +50,12 @@ while IFS= read -r path; do
     echo "FAIL: spec.path $path does not exist in this repo"; fail=1; continue
   fi
   rendered=$((rendered + 1))
-  if ! kubectl kustomize "$path" >/dev/null 2>"$workdir/err"; then
+  if kubectl kustomize "$path" >"$workdir/one.yaml" 2>"$workdir/err"; then
+    if [ -n "$rendered_out" ]; then
+      printf -- '---\n' >>"$rendered_out"
+      cat "$workdir/one.yaml" >>"$rendered_out"
+    fi
+  else
     echo "FAIL: kubectl kustomize $path"; sed 's/^/      /' "$workdir/err"; fail=1
   fi
 done <"$workdir/paths.txt"
@@ -50,18 +65,27 @@ echo "    $rendered Kustomization path(s) rendered from kubernetes/apps"
 # silently never applied and never pruned: that is how a leftover test VM
 # directory survived in this repo unnoticed. A Flux Kustomization counts as a
 # reference through its spec.path, which is how every .../base directory is
-# reached; the surrounding kustomization.yaml only lists ks.yaml.
+# reached; the surrounding kustomization.yaml only lists ks.yaml. A kustomization
+# also references files through configMapGenerator.files, patches and components,
+# so those count too - a walk that only followed resources: would report a file
+# that is applied as ConfigMap content or as a patch as an orphan.
 # A manifest that is deliberately never applied says so in its own first lines
 # (`# not-applied: <reason>`); anything else is a bug.
 echo '==> checking for manifests no kustomization references'
 python3 - kubernetes/apps/kustomization.yaml kubernetes/bootstrap/kustomization.yaml <<'PY' || fail=1
 import os, re, sys
 
+# A marker may silence a manifest, but only in the first lines and only with a
+# real reason: `# not-applied: TODO` or a one-word marker is not a decision.
+NOT_APPLIED_LINES = 15
+NOT_APPLIED_MIN_REASON = 20
+
 
 def not_applied(path):
     """Reason from the `# not-applied:` marker at the top of a manifest, whose
-    continuation is the comment lines that follow it."""
-    reason, lines = [], list(open(path))[:15]
+    continuation is the comment lines that follow it. A placeholder reason is not
+    a reason, so it does not silence the file."""
+    reason, lines = [], list(open(path))[:NOT_APPLIED_LINES]
     for line in lines:
         if marker := re.search(r'# not-applied:\s*(\S.*?)\s*$', line):
             reason.append(marker.group(1))
@@ -69,20 +93,43 @@ def not_applied(path):
             if not line.lstrip().startswith('#'):
                 break
             reason.append(line.lstrip().lstrip('#').strip())
-    return ' '.join(reason) or None
+    text = ' '.join(reason)
+    if len(text) < NOT_APPLIED_MIN_REASON or re.fullmatch(r'(?i)\s*(todo|fixme|wip|n/?a|none|tbd)[.!]?\s*', text):
+        return None
+    return text or None
 
 
-def resources(path):
-    """Entries of the top-level `resources:` list of a kustomization."""
-    entries, inside = [], False
+def path_entries(path):
+    """Path-like entries a kustomization references: the entries of resources:
+    and components:, the path: of each patches: entry, and the file names in each
+    configMapGenerator's files: list. Entries that are a URL or a git ref are
+    skipped - they are not files in this repository."""
+    out = []
+    block, in_files = None, False
     for line in open(path):
-        if re.match(r'^resources:', line):
-            inside = True
-        elif inside and (item := re.match(r'^[ \t]*-[ \t]+(\S+)\s*$', line)):
-            entries.append(item.group(1))
-        elif inside and line.strip() and not line.lstrip().startswith('#'):
-            inside = False
-    return entries
+        stripped = line.strip()
+        if not stripped or stripped.startswith('#'):
+            continue
+        if not line[:1].isspace():
+            block = stripped[:-1] if stripped.endswith(':') else None
+            in_files = False
+            continue
+        if block in ('resources', 'components'):
+            if entry := re.match(r'^-\s+(\S+)\s*$', stripped):
+                out.append(entry.group(1))
+        elif block == 'patches':
+            if entry := re.match(r'^(?:-\s+)?path:\s*(\S+)\s*$', stripped):
+                out.append(entry.group(1))
+        elif block == 'configMapGenerator':
+            if re.match(r'^files:\s*$', stripped):
+                in_files = True
+                continue
+            if in_files and (entry := re.match(r'^-\s+(\S+)\s*$', stripped)):
+                out.append(entry.group(1))
+            else:
+                in_files = False
+    return [entry for entry in out
+            if '://' not in entry and not entry.startswith('git@') and '?ref=' not in entry]
 
 
 def refs(path):
@@ -91,8 +138,7 @@ def refs(path):
     if os.path.basename(path) == 'kustomization.yaml':
         base = os.path.dirname(path)
         out = [os.path.normpath(os.path.join(base, entry))
-               for entry in resources(path) if '://' not in entry
-               and not entry.startswith('git@') and '?ref=' not in entry]
+               for entry in path_entries(path)]
     for doc in re.split(r'^---\s*$', open(path).read(), flags=re.M):
         is_flux = re.search(r'^apiVersion: \S*fluxcd', doc, re.M)
         spec_path = re.search(r'^  path: (\S+)$', doc, re.M)

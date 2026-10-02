@@ -21,8 +21,13 @@ spec:
     remediation:
       retries: 3
   postRenderers:
-    # The chart exposes affinity natively, but not topology spread constraints.
-    # Keep spread on the Deployment only so Helm's rendered manifest stays targeted.
+    # The chart exposes neither a fixed replica count nor the recreate-style
+    # rollout this single-replica install wants, so the Deployment is patched
+    # directly. The patch used to add a topologySpreadConstraint on
+    # kubernetes.io/hostname as well - with maxSkew 1 / ScheduleAnyway that says
+    # exactly what the chart-native preferred podAntiAffinity below says (spread
+    # when there is room, never block scheduling), so it was two encodings of one
+    # intent and one of them has been removed.
     - kustomize:
         patches:
           - target:
@@ -39,15 +44,6 @@ spec:
                   rollingUpdate:
                     maxSurge: 0
                     maxUnavailable: 1
-              - op: add
-                path: /spec/template/spec/topologySpreadConstraints
-                value:
-                  - maxSkew: 1
-                    topologyKey: kubernetes.io/hostname
-                    whenUnsatisfiable: ScheduleAnyway
-                    labelSelector:
-                      matchLabels:
-                        name: velero
   values:
     # Flux manages CRD updates via upgrade.crds: CreateReplace; disable the
     # chart's own pre-upgrade hook job so it cannot dead-lock on a small cluster.
@@ -81,6 +77,41 @@ spec:
             # group were deleted, which is what left the old location Unavailable
             # for weeks and every schedule failing silently.
             resourceGroup: rg-fileserver-backup
+            # Credential scope, stated rather than implied: this key opens the
+            # whole storage account, which also holds the fileserver's Immich
+            # dumps, while Velero only needs the `velero` container. The plugin
+            # gives no narrower option *at this version*: its credentials file
+            # understands an account access key (AZURE_STORAGE_ACCOUNT_ACCESS_KEY)
+            # or a service principal / AAD identity, and has no SAS-token path -
+            # so a container-scoped SAS cannot be handed to Velero as it stands.
+            # What the narrowing would take, when someone wants it:
+            #   * a dedicated storage account holding nothing but Velero's
+            #     container, with its own key (simplest, keeps the
+            #     no-expiry property); or
+            #   * useAAD: "true" with a service principal granted
+            #     Storage Blob Data Contributor scoped to the `velero` container -
+            #     narrower, but reintroduces a secret with an expiry date, which
+            #     is exactly what took the previous installation down.
+            #
+            # Rotation, so the next person does not have to rediscover it - the
+            # key is plaintext nowhere but this SOPS file, and the plugin reads it
+            # as AZURE_STORAGE_ACCOUNT_ACCESS_KEY out of the secret's `cloud` key:
+            #   1. sops -d kubernetes/apps/backup/velero/base/velero-credentials.sops.yaml
+            #      write the new key into a file inside the repo, encrypt it
+            #      (from the repository root, so .sops.yaml's age recipient and
+            #      encrypted_regex apply) and prove it reads back:
+            #        sops -e -i kubernetes/apps/backup/velero/base/velero-credentials.sops.yaml
+            #        sops -d kubernetes/apps/backup/velero/base/velero-credentials.sops.yaml
+            #      Alternative, no plaintext ever on disk: sops <file> edits the
+            #      decrypted content in $EDITOR and re-encrypts on save.
+            #   2. flux reconcile kustomization velero -n flux-system --with-source
+            #   3. prove it before trusting the schedules:
+            #        kubectl -n velero get backupstoragelocation default -o jsonpath='{.status.phase}'   # Available
+            #        kubectl -n velero get backups.velero.io      # next one Completed, not Failed
+            #   4. only then renew/revoke the old key:
+            #        az storage account keys renew -g rg-fileserver-backup -n tuntelderbackupee3949 --key key1
+            # A wrong key fails loudly at step 3 (the location goes Unavailable),
+            # which is the whole reason the backup-health rules watch that phase.
             storageAccount: tuntelderbackupee3949
             # Without this the plugin ignores the access key in the secret and
             # falls back to Azure AD, which then needs a service principal that
@@ -103,6 +134,20 @@ spec:
         repositoryConfigData:
           global:
             keepLatestMaintenanceJobs: 3
+      # Velero interprets a cron schedule in the server's local time, and the
+      # server container has no TZ set - so it runs on UTC. The schedules below
+      # are written as wall-clock Amsterdam times (02:13, as the README and the
+      # restore drill read them), which without this lands at 04:13 local in
+      # summer and 03:13 in winter: the drill's "do not let a rollout land across
+      # 02:13" would point at the wrong hour, and a backup would run in the
+      # morning. Pinned to ${TZ} - Europe/Amsterdam, from cluster-secrets, the
+      # same substitution every other workload here uses - and the image carries
+      # the zone database it needs (/usr/share/zoneinfo/Europe/Amsterdam is
+      # present in velero:v1.18.2), so the container resolves the zone rather
+      # than silently falling back to UTC.
+      extraEnvVars:
+        - name: TZ
+          value: "${TZ}"
 
     resources:
       requests:
@@ -123,21 +168,12 @@ spec:
                 matchLabels:
                   name: velero
 
-    extraObjects:
-      - apiVersion: policy/v1
-        kind: PodDisruptionBudget
-        metadata:
-          name: velero
-        spec:
-          # Deliberately 0. There is one replica, and node drains are a routine
-          # operation on this cluster (see the failure drill in the README); a
-          # higher value would block them to protect a pod that restarts in
-          # seconds. Monitoring, not the PDB, is what catches a Velero that is
-          # down.
-          minAvailable: 0
-          selector:
-            matchLabels:
-              name: velero
+    # No PodDisruptionBudget. There was one with minAvailable: 0, which is a PDB
+    # that cannot block anything: a manifest and an object spent to express
+    # nothing, and worse, an invitation to "fix" it upwards until node drains -
+    # routine here, see the failure drill in the README - have to wait for a pod
+    # that restarts in seconds. Monitoring, not a PDB, is what catches a Velero
+    # that is down.
 
     backupsEnabled: true
     # No volume snapshots: there is no snapshot StorageClass in this cluster and
@@ -161,11 +197,16 @@ spec:
           release: kube-prometheus-stack
 
     # fs-restore-action-config tells Velero which image to inject as the
-    # restore-helper init container during file-system (kopia) restores. Since
-    # v1.14 velero-restore-helper is merged into the main velero image; without
-    # this ConfigMap Velero falls back to the non-existent
-    # "velero-restore-helper" image name and every PVC restore fails while the
-    # backup side still looks fine.
+    # restore-helper init container during file-system (kopia) restores.
+    #
+    # It deliberately does NOT name an image. There used to be one here, pinned
+    # by hand at a patch ahead of the server (v1.18.4 against a chart that
+    # deploys v1.18.2), which is drift waiting to happen: since v1.14
+    # velero-restore-helper is the *same binary* as the velero server, so the two
+    # must never be different versions. When `data.image` is unset, Velero uses
+    # the image of its own Deployment (pkg/restore/actions/pod_volume_restore_action.go,
+    # getImage -> GetVeleroServerImage(deployment)), so the server image is the
+    # single source for both and a chart bump moves them together.
     #
     # secCtxRunAsUser is not decoration. When this ConfigMap sets none of the
     # secCtx* keys, Velero copies the application container's securityContext
@@ -183,10 +224,32 @@ spec:
           velero.io/plugin-config: ""
           velero.io/pod-volume-restore: RestoreItemAction
         data:
-          image: docker.io/velero/velero:v1.18.4
           secCtxRunAsUser: "1000"
 
     schedules:
+      # Databases are copied as live filesystems here, with no pre-backup hook:
+      # Postgres is mid-write when Kopia reads its directory, so a restore
+      # depends on crash recovery from a torn copy. The fix belongs on the pod,
+      # as a Velero annotation, and that pod is created by the Keycloak chart in
+      # kubernetes/apps/auth/keycloak/base/postgres-helmrelease.yaml - not this
+      # file - so the exact YAML is recorded here until it lands there:
+      #
+      #   defaultPodOptions:
+      #     annotations:
+      #       pre.hook.backup.velero.io/container: app
+      #       pre.hook.backup.velero.io/command: '["psql","-U","keycloak","-d","keycloak","-c","CHECKPOINT"]'
+      #       pre.hook.backup.velero.io/timeout: 60s
+      #
+      # CHECKPOINT flushes the dirty pages to disk before the volume is read,
+      # which is the cheap part of consistency; the container needs no shell for
+      # it (Velero execs the JSON array directly), runs as root and reaches the
+      # local socket as POSTGRES_USER/POSTGRES_DB are both keycloak. on-error is
+      # left at Velero's default, Fail, on purpose: a hook that cannot run means
+      # the copy is not trustworthy and the backup should say so instead of
+      # reporting Completed. Note this covers `keycloak-postgres` in `auth` only;
+      # `mushroom-finder-postgres` in `services` has the same shape and the same
+      # problem, and is not part of this change.
+      #
       # Scoped to whole namespaces, and deliberately NOT to a label selector.
       #
       # A selector cannot see the things this backup most needs to hold. Three
@@ -209,6 +272,11 @@ spec:
           storageLocation: default
           includedNamespaces:
             - auth
+            # frigate was carved out of `services` on 2026-10-02 (it is the one
+            # workload that needs a privileged container) and came with it: its
+            # config PVC is small and it is the only thing that reconstructs the
+            # camera setup, while the recordings volume opts itself out below.
+            - frigate
             - services
       apps-monthly:
         schedule: "13 4 1 * *"
@@ -217,4 +285,9 @@ spec:
           storageLocation: default
           includedNamespaces:
             - auth
+            # frigate was carved out of `services` on 2026-10-02 (it is the one
+            # workload that needs a privileged container) and came with it: its
+            # config PVC is small and it is the only thing that reconstructs the
+            # camera setup, while the recordings volume opts itself out below.
+            - frigate
             - services

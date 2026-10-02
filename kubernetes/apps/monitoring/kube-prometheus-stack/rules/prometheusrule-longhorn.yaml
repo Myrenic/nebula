@@ -1,0 +1,92 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: longhorn-health
+  labels:
+    release: kube-prometheus-stack
+spec:
+  groups:
+    - name: longhorn-storage-health
+      rules:
+        # Longhorn was completely unmonitored: no `longhorn_*` series was scraped
+        # at all, and a volume that came back `faulted` after a node reboot was
+        # only found by looking at the UI. These rules are the layer that notices.
+        - alert: LonghornVolumeFaulted
+          # The state is named rather than derived from "not healthy". The metric
+          # carries one series per robustness value and only the current one is 1,
+          # so `{state="healthy"} == 0` also matches robustness `unknown`, which is
+          # not an actionable verdict - the rule would cover states nobody can act
+          # on instead of the faulted volume this rule exists for.
+          expr: longhorn_volume_robustness{state="faulted"} == 1
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: Longhorn volume is faulted
+            description: >-
+              Volume {{ $labels.volume }} (PVC {{ $labels.pvc }} in
+              {{ $labels.pvc_namespace }}, node {{ $labels.node }}) is faulted and
+              its data is unavailable. autoSalvage is enabled, so the 5-minute
+              delay gives the automatic salvage a chance to finish before paging.
+        - alert: LonghornVolumeDegraded
+          expr: longhorn_volume_robustness{state="degraded"} == 1
+          for: 1h
+          labels:
+            severity: warning
+          annotations:
+            summary: Longhorn volume is degraded
+            description: >-
+              Volume {{ $labels.volume }} (PVC {{ $labels.pvc }} in
+              {{ $labels.pvc_namespace }}) has run with fewer replicas than
+              configured for an hour. Rebuilds show here briefly; an hour of it
+              means a replica is gone and the next failure is data loss.
+        - alert: LonghornNodeNotReady
+          expr: longhorn_node_status{condition="ready"} == 0
+          for: 10m
+          labels:
+            severity: critical
+          annotations:
+            summary: Longhorn node is not ready
+            description: >-
+              Longhorn reports node {{ $labels.node }} as not ready for 10
+              minutes. Volumes on it cannot be attached or rebuilt.
+        - alert: LonghornDiskSpaceLow
+          # `storageOverProvisioningPercentage: 200` lets the scheduler promise
+          # twice the disk actually present, so a volume can be placed on a disk
+          # that later fills. Reservations count because Longhorn redirects them
+          # to the same disk. 15% left is the point where a replica rebuild or a
+          # compaction has nowhere to write.
+          expr: |-
+            (longhorn_disk_capacity_bytes - longhorn_disk_usage_bytes - longhorn_disk_reservation_bytes)
+            / longhorn_disk_capacity_bytes
+            < 0.15
+          for: 30m
+          labels:
+            severity: warning
+          annotations:
+            summary: Longhorn disk is running out of headroom
+            description: >-
+              Disk {{ $labels.disk }} on node {{ $labels.node }} has under 15% of
+              its capacity free after Longhorn's reservations. With 200%
+              over-provisioning the scheduler will still place volumes here, so a
+              full disk takes its volumes down with it.
+        - alert: LonghornOverProvisioned
+          # The cause behind LonghornDiskSpaceLow above. `storageOverProvisioningPercentage:
+          # 200` is a promise, not a measurement: it lets Longhorn commit twice the
+          # disk it has, and what the setting actually controls is `StorageScheduled`
+          # - the bytes the scheduler has already handed out - which is exactly what
+          # this per-node metric sums. 1.8 is that promise minus headroom: above it
+          # there is no room left for the next volume, while the disk itself is not
+          # yet full, which is the state LonghornDiskSpaceLow cannot see.
+          expr: longhorn_node_storage_scheduled_bytes / longhorn_node_storage_capacity_bytes > 1.8
+          for: 6h
+          labels:
+            severity: warning
+          annotations:
+            summary: Longhorn node has over-committed its disk
+            description: >-
+              Node {{ $labels.node }} has scheduled more than 1.8x its disk
+              capacity against a configured limit of 200%. Volume placement on it
+              can start failing while the disk still reports free space. Scheduled
+              bytes only come down by deleting volumes, so this is deliberately a
+              six-hour condition rather than a spike.

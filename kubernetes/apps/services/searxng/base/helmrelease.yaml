@@ -59,6 +59,12 @@ spec:
             securityContext:
               runAsNonRoot: true
               allowPrivilegeEscalation: false
+              # The process writes to two paths: the engine cache below and
+              # Python's temp files in /tmp. Verified by running this tag with
+              # --read-only, a writable /var/cache/searxng and a writable /tmp -
+              # without the latter it dies on "No usable temporary directory
+              # found".
+              readOnlyRootFilesystem: true
               capabilities:
                 drop: ["ALL"]
     defaultPodOptions:
@@ -84,9 +90,14 @@ spec:
         globalMounts:
           - path: /etc/searxng
             readOnly: true
-      # SearXNG keeps a small cache of engine state; emptyDir is enough and it
-      # is the only path the process writes to.
+      # SearXNG keeps a small cache of engine state; emptyDir is enough. With
+      # the read-only root filesystem this and /tmp are the only writable paths
+      # the process gets, and it needs both.
       cache:
         type: emptyDir
         globalMounts:
           - path: /var/cache/searxng
+      tmp:
+        type: emptyDir
+        globalMounts:
+          - path: /tmp

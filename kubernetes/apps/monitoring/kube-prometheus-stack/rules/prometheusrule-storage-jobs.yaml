@@ -1,0 +1,51 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: storage-job-health
+  labels:
+    release: kube-prometheus-stack
+spec:
+  groups:
+    - name: longhorn-job-health
+      rules:
+        # A *failed* run is already covered by the chart's KubeJobFailed. What had
+        # no coverage at all is a CronJob that stops being scheduled - suspended,
+        # deleted and not recreated, or left with a schedule that never fires.
+        # That failure is silent, and for the adjuster it means every volume stays
+        # at one replica forever: Plan B in the Longhorn HelmRelease notes (raise
+        # existing volumes back to 2 once a second node is Ready) simply never
+        # happens, and nothing says so.
+        #
+        # Deliberately a threshold on the last-successful time rather than
+        # absent(): a CronJob that has not had its first run yet would trip an
+        # absent() version the moment it was created.
+        - alert: LonghornReplicaAdjusterStale
+          # 90 minutes is eighteen missed runs of the 5-minute schedule: generous
+          # enough that a slow run or one skipped tick cannot fire it, short
+          # enough that the cluster does not spend an afternoon at one replica.
+          expr: time() - kube_cronjob_status_last_successful_time{namespace="storage", cronjob="longhorn-replica-adjuster"} > 5400
+          for: 15m
+          labels:
+            severity: warning
+          annotations:
+            summary: Longhorn replica adjuster has stopped succeeding
+            description: >-
+              The longhorn-replica-adjuster CronJob has not completed a successful
+              run for over 90 minutes. Existing volumes keep the replica count they
+              have now, so every volume stays at a single replica with nothing
+              reporting it.
+        - alert: LonghornReleasedVolumeReportStale
+          # Same shape, schedule-appropriate threshold: this CronJob runs daily at
+          # 05:41, so the adjuster's 90 minutes would be true for 23 hours of every
+          # day. 30 hours is one full period plus the same slack the daily Velero
+          # rule uses.
+          expr: time() - kube_cronjob_status_last_successful_time{namespace="storage", cronjob="longhorn-released-volume-report"} > 30 * 3600
+          for: 15m
+          labels:
+            severity: warning
+          annotations:
+            summary: Longhorn released-volume report has stopped running
+            description: >-
+              The longhorn-released-volume-report CronJob has not completed a
+              successful run in 30 hours. Released volumes keep holding their
+              replicas, which is disk space that is no longer being reported.

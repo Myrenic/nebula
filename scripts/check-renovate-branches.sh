@@ -83,7 +83,10 @@ while IFS= read -r branch; do
       state=FAIL
       detail="does not merge cleanly into ${base#*/}"
     # Run the base checkout's script against the merged tree: the gates come from
-    # the trusted revision, the manifests from the branch under test.
+    # the trusted revision, the manifests from the branch under test. This works
+    # because validate.sh resolves any helper it calls (check-manifests.sh)
+    # relative to itself, not relative to "$wt" - so a branch that rewrites a gate
+    # script cannot rewrite the gate that judges it.
     elif bash "$PWD/scripts/validate.sh" "$wt" >"$log" 2>&1; then
       state=PASS
       detail="merges into ${base##*/} and passes every gate"

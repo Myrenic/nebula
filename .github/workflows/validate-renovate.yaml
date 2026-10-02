@@ -13,6 +13,11 @@ name: Validate Renovate
 # `renovate/validate` commit status on the branch head. A branch is marked pending
 # before it is checked, so a validator that dies halfway leaves the branch pending
 # rather than looking green.
+#
+# scripts/check-renovate-branches.sh runs validate.sh from THIS checkout (the
+# trusted revision) with the branch worktree as its root, and validate.sh resolves
+# its helper scripts relative to itself - so the gates always come from the trusted
+# revision and only the manifests come from the branch under test.
 on:
   workflow_run:
     workflows: [Renovate]
@@ -32,25 +37,42 @@ jobs:
     name: Renovate branches
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      # Pinned to a commit SHA with the version in a trailing comment: a tag is
+      # mutable, and this action runs with the repository's contents and token.
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           fetch-depth: 0 # the script fetches and walks the renovate refs
 
-      - uses: azure/setup-kubectl@v4
+      - uses: azure/setup-kubectl@776406bce94f63e41d621b960d78ee25c8b76ede # v4
         with:
           version: v1.36.3
 
+      # Same pins and same published-digest verification as validate-changes.yaml:
+      # whatever decides whether a manifest passes is a fixed artefact.
       - name: Install yamllint
         run: |
+          set -euo pipefail
           python3 -m venv "$RUNNER_TEMP/yamllint"
-          "$RUNNER_TEMP/yamllint/bin/pip" install --quiet yamllint==1.38.0
+          YAMLLINT_VERSION=1.38.0
+          meta="$(curl -sSfL "https://pypi.org/pypi/yamllint/${YAMLLINT_VERSION}/json" \
+            | python3 -c 'import json,sys; u=json.load(sys.stdin)["urls"]; w=[x for x in u if x["filename"].endswith("-py3-none-any.whl")][0]; print(w["digests"]["sha256"], w["url"])')"
+          yamllint_wheel="$RUNNER_TEMP/$(basename "$(printf '%s' "$meta" | cut -d' ' -f2)")"
+          curl -sSfL -o "$yamllint_wheel" "$(printf '%s' "$meta" | cut -d' ' -f2)"
+          echo "$(printf '%s' "$meta" | cut -d' ' -f1)  $yamllint_wheel" | sha256sum -c -
+          "$RUNNER_TEMP/yamllint/bin/pip" install --quiet "$yamllint_wheel"
           echo "$RUNNER_TEMP/yamllint/bin" >>"$GITHUB_PATH"
 
       - name: Install kubeconform
         run: |
-          curl -sSfL -o "$RUNNER_TEMP/kubeconform.tar.gz" \
+          set -euo pipefail
+          # The file name is kept as the release publishes it: the digest in
+          # CHECKSUMS is the one for that name, and sha256sum -c reads it from there.
+          curl -sSfL -o "$RUNNER_TEMP/kubeconform-linux-amd64.tar.gz" \
             https://github.com/yannh/kubeconform/releases/download/v0.7.0/kubeconform-linux-amd64.tar.gz
-          tar -xzf "$RUNNER_TEMP/kubeconform.tar.gz" -C "$RUNNER_TEMP" kubeconform
+          curl -sSfL -o "$RUNNER_TEMP/CHECKSUMS" \
+            https://github.com/yannh/kubeconform/releases/download/v0.7.0/CHECKSUMS
+          (cd "$RUNNER_TEMP" && grep '^[0-9a-f]*  kubeconform-linux-amd64\.tar\.gz$' CHECKSUMS | sha256sum -c -)
+          tar -xzf "$RUNNER_TEMP/kubeconform-linux-amd64.tar.gz" -C "$RUNNER_TEMP" kubeconform
           echo "$RUNNER_TEMP" >>"$GITHUB_PATH"
 
       - name: Mark every branch pending

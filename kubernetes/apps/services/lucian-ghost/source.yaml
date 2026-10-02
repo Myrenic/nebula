@@ -2,6 +2,18 @@
 #
 # Public on purpose: the GitRepository below has no secretRef, so anything
 # private would need credentials in the cluster that this repo does not have.
+#
+# Pinned to a commit rather than tracking `main`. It used to follow the branch
+# on a 1-minute poll, which means a push to that repository was deployed with no
+# review on this side - and there is no CI over there that could stand in for
+# one. Upstream publishes no tags (`git ls-remote --tags` returns nothing), so a
+# commit is the only immutable ref available. Bump it by hand:
+#
+#     git ls-remote https://github.com/Myrenic/lucian-ghost refs/heads/main
+#
+# and copy the sha over the one below. Renovate cannot follow a commit, so this
+# is the one place in the repository where a dependency bump is a human step;
+# the interval still polls, it just compares the same immutable commit each time.
 apiVersion: source.toolkit.fluxcd.io/v1
 kind: GitRepository
 metadata:
@@ -10,5 +22,5 @@ metadata:
 spec:
   interval: 1m
   ref:
-    branch: main
+    commit: c07bd0f5445101ef904cec47a9a314c8ad79fcb8
   url: https://github.com/Myrenic/lucian-ghost

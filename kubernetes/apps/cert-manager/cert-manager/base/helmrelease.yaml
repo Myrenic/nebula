@@ -13,8 +13,22 @@ spec:
       enabled: true
     dns01RecursiveNameservers: https://1.1.1.1:443/dns-query,https://9.9.9.11:443/dns-query
     dns01RecursiveNameserversOnly: true
+    # Everything here terminates one wildcard certificate from one Cloudflare
+    # DNS-01 ClusterIssuer, so a renewal that does not happen is a whole-cluster
+    # outage. With this off the controller exported no certmanager_* series at all
+    # (verified: the endpoint serves them, nothing scraped it) and certificate
+    # expiry was unobservable. Enabling prometheus also creates the metrics
+    # Services - the chart only renders those when prometheus.enabled is true, so
+    # the ServiceMonitor would have had no endpoints without it.
     prometheus:
-      enabled: false
+      enabled: true
+      servicemonitor:
+        enabled: true
+        # Prometheus here selects ServiceMonitors by `release: kube-prometheus-stack`
+        # (exact match, not "all monitors"); the chart's own `prometheus: default`
+        # label means nothing to this Prometheus.
+        labels:
+          release: kube-prometheus-stack
     webhook:
       replicaCount: 2
       podDisruptionBudget:

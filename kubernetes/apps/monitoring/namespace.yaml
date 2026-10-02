@@ -7,3 +7,7 @@ metadata:
   labels:
     # privileged on purpose: node-exporter uses hostNetwork and hostPath mounts (/proc, /sys, /var/lib).
     pod-security.kubernetes.io/enforce: privileged
+    # Pins the policy to the version the cluster runs (kubelet v1.37.0). Without
+    # it the enforce version floats with each Kubernetes upgrade, so a new
+    # privileged-level restriction takes effect at the next upgrade with no review.
+    pod-security.kubernetes.io/enforce-version: v1.37

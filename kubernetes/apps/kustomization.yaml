@@ -12,6 +12,7 @@ resources:
   - ./cert-manager
   - ./common
   - ./flux-system
+  - ./frigate
   - ./monitoring
   - ./network
   - ./services

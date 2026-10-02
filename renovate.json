@@ -1,5 +1,6 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "description": "Nothing is adopted the hour it is released. minimumReleaseAge holds every update for three days: digest, pin and patch updates are automerged here, and with the 6-hourly run a bad upstream release would otherwise be live within hours of appearing. Three days is longer than the window in which an upstream yanks or re-tags a broken patch, and short enough not to hold a homelab back. Vulnerability fixes are exempt (see vulnerabilityAlerts) and are never automerged.",
   "extends": ["config:recommended", ":dependencyDashboard", ":semanticCommits"],
   "labels": ["dependencies", "renovate"],
   "enabledManagers": ["flux", "kubernetes", "github-actions", "dockerfile", "custom.regex"],
@@ -54,32 +55,47 @@
     },
     {
       "customType": "regex",
-      "description": "The kubectl the validation workflows install. It is deliberately not tied to the cluster's Kubernetes version: kubectl supports one minor either side, so this is a bump to review rather than to follow blindly.",
-      "fileMatch": ["^\\.github/workflows/.+\\.ya?ml$"],
-      "matchStrings": ["uses: azure/setup-kubectl@\\S+\\n(?:\\s+with:\\n)?\\s+version: (?<currentValue>\\S+)"],
+      "description": "The kubectl the validation workflows install, on either host. It is deliberately not tied to the cluster's Kubernetes version: kubectl supports one minor either side, so this is a bump to review rather than to follow blindly.",
+      "fileMatch": ["^\\.(github|forgejo)/workflows/.+\\.ya?ml$"],
+      "matchStrings": ["uses: azure/setup-kubectl@\\S+(?:\\s+#\\s*\\S+)?\\n(?:\\s+with:\\n)?\\s+version: (?<currentValue>\\S+)"],
       "datasourceTemplate": "github-releases",
       "depNameTemplate": "kubernetes/kubernetes",
       "extractVersionTemplate": "^v(?<version>\\d+\\.\\d+\\.\\d+)$"
     },
     {
       "customType": "regex",
-      "description": "yamllint, pinned with == in the validation workflows. A linter bump can change what passes, so it lands as a pull request.",
-      "fileMatch": ["^\\.github/workflows/.+\\.ya?ml$"],
-      "matchStrings": ["yamllint==(?<currentValue>\\S+)"],
+      "description": "yamllint, pinned by version in the validation workflows on either host. The workflows fetch the wheel from PyPI and check it against the digest PyPI publishes for that version, so this pin is the only thing to move. A linter bump can change what passes, so it lands as a pull request.",
+      "fileMatch": ["^\\.(github|forgejo)/workflows/.+\\.ya?ml$"],
+      "matchStrings": ["YAMLLINT_VERSION=(?<currentValue>\\d+\\.\\d+\\.\\d+)", "yamllint==(?<currentValue>\\S+)"],
       "datasourceTemplate": "pypi",
       "depNameTemplate": "yamllint"
     },
     {
       "customType": "regex",
-      "description": "kubeconform, downloaded by version in the validation workflows.",
-      "fileMatch": ["^\\.github/workflows/.+\\.ya?ml$"],
+      "description": "kubeconform, downloaded by version in the validation workflows on either host.",
+      "fileMatch": ["^\\.(github|forgejo)/workflows/.+\\.ya?ml$"],
       "matchStrings": ["kubeconform/releases/download/(?<currentValue>v\\S+?)/kubeconform"],
       "datasourceTemplate": "github-releases",
       "depNameTemplate": "yannh/kubeconform",
       "extractVersionTemplate": "^v(?<version>\\d+\\.\\d+\\.\\d+)$"
+    },
+    {
+      "customType": "regex",
+      "description": "The container images the Forgejo workflows run in - the gitleaks scan and the validate job's alpine/k8s. Neither the github-actions manager nor the docker manager looks in .forgejo/, and a bump there changes what the required check actually runs, so it needs its own regex manager.",
+      "fileMatch": ["^\\.forgejo/workflows/.+\\.ya?ml$"],
+      "matchStrings": ["image: (?<depName>[\\w./-]+):(?<currentValue>[\\w.-]+)"],
+      "datasourceTemplate": "docker"
     }
   ],
   "prCreation": "immediate",
+  "minimumReleaseAge": "3 days",
+  "osvVulnerabilityAlerts": true,
+  "vulnerabilityAlerts": {
+    "description": "A CVE gets its own pull request, from OSV (this repository's canonical host is Forgejo, so GitHub's Dependabot alerts are not the source). Vulnerability fixes deliberately skip the three-day release age: the default for this object has minimumReleaseAge null, and a known-exploitable version should not stay deployed for three more days. Never automerged - a security fix is read, not followed.",
+    "labels": ["security"],
+    "automerge": false,
+    "minimumReleaseAge": null
+  },
   "prConcurrentLimit": 10,
   "prHourlyLimit": 10,
   "separateMajorMinor": true,
@@ -111,6 +127,12 @@
     {
       "description": "CI tooling is a bump to read, not one to follow the cluster with: yamllint, kubeconform and the kubectl the workflows install all change what a green check means.",
       "matchFileNames": [".github/workflows/**"],
+      "automerge": false,
+      "addLabels": ["ci"]
+    },
+    {
+      "description": "The Forgejo workflows are the canonical host's own checks - the gitleaks scan and scripts/validate.sh, which is what gates a merge to main. A container image or tool bump there changes what 'green' means on the host that matters, so it is read like the GitHub workflows above.",
+      "matchFileNames": [".forgejo/workflows/**"],
       "automerge": false,
       "addLabels": ["ci"]
     },

@@ -34,9 +34,49 @@ spec:
                 memory: 128Mi
               limits:
                 memory: 512Mi
+            probes:
+              # /healthz is the endpoint Spottarr itself maps
+              # (app.MapHealthChecks("/healthz") in Spottarr.Web/Program.cs),
+              # not a guess. A first start migrates the SQLite database before
+              # the server listens, so the startup probe carries the long budget
+              # and liveness does not begin until it has passed.
+              startup:
+                enabled: true
+                custom: true
+                spec:
+                  httpGet:
+                    path: /healthz
+                    port: 8383
+                  periodSeconds: 10
+                  timeoutSeconds: 5
+                  failureThreshold: 30
+              readiness:
+                enabled: true
+                custom: true
+                spec:
+                  httpGet:
+                    path: /healthz
+                    port: 8383
+                  periodSeconds: 10
+                  timeoutSeconds: 5
+                  failureThreshold: 6
+              liveness:
+                enabled: true
+                custom: true
+                spec:
+                  httpGet:
+                    path: /healthz
+                    port: 8383
+                  periodSeconds: 30
+                  timeoutSeconds: 5
+                  failureThreshold: 5
             securityContext:
               runAsNonRoot: true
               allowPrivilegeEscalation: false
+              # The only path it writes to is /data (the SQLite database);
+              # verified by running 1.20.0 with --read-only and just that mount
+              # - it migrates, listens and answers /healthz.
+              readOnlyRootFilesystem: true
               capabilities:
                 drop: ["ALL"]
     defaultPodOptions:

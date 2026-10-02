@@ -46,7 +46,10 @@ Ruled out (verified, not assumed):
 
 - No Talos upgrade: the Omni cluster `default/talos-default` is on **1.13.8** and
   kubelet reports `Talos (v1.13.8)`. Note: `talosctl version` also prints the client
-  version (1.13.9) — do not take that for the node version.
+  version (1.13.9) — do not take that for the node version. (Those were the versions
+  on the day; the cluster has since moved to Talos v1.14.1 and Kubernetes v1.37.0,
+  and keeping the documentation level with that is
+  [known-issues.md §4](../known-issues.md#4-cluster-versions-can-drift-from-the-documentation-and-the-template).)
 - Network is **not** the cause: 30/30 connections to all three API servers
   (`10.0.50.116/.228/.218:6443`) from a pod on `45w-c87`, plus 7/7 to the VIP
   `10.96.0.1:443`.
@@ -60,4 +63,7 @@ manual step.
 **Open:** why those three reboots? Not this repository, and no upgrade. Probably the
 rollout of the corrected NVMe/machine-config patches. Talos keeps no logs of the
 previous boot, so the cause can no longer be established — but it is worth finding
-out whether this comes back.
+out whether this comes back. It is tracked as
+[#36](https://code.tuntelder.com/mtuntelder/nebula/issues/36), and what to capture if
+it does is in
+[known-issues.md §3](../known-issues.md#3-the-2026-09-19-reboots-are-unexplained).

@@ -1,3 +1,7 @@
+// not-applied: this file is deliberately not in the configMapGenerator in
+// ../kustomization.yaml, so it is never shipped to the cluster. It needs
+// `node --test` and the full source tree, both of which exist in a checkout, not
+// on the ConfigMap mount the addon runs from. Run it with `npm test` there.
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';

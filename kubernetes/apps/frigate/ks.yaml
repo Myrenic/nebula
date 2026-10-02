@@ -4,12 +4,12 @@ metadata:
   name: frigate
   namespace: flux-system
 spec:
-  targetNamespace: services
+  targetNamespace: frigate
   interval: 1h
   retryInterval: 1m
   timeout: 5m
   prune: true
-  path: ./kubernetes/apps/services/frigate/base
+  path: ./kubernetes/apps/frigate/base
   sourceRef:
     kind: GitRepository
     name: flux-system

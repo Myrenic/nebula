@@ -1,8 +1,7 @@
 # cluster-secrets
 
-The `cluster-secrets` Secret is this cluster's single secret bundle. It is the only
-file in this repository that holds encrypted values, and everything that needs a
-credential gets it from here rather than from a file of its own:
+The `cluster-secrets` Secret is this cluster's shared secret bundle, and everything
+that needs a credential gets it from here rather than from a file of its own:
 
 - **At build time.** Flux substitutes `${VAR}` placeholders in manifests while it
   renders them (`spec.postBuild.substituteFrom` on the Kustomizations). Git holds
@@ -11,6 +10,17 @@ credential gets it from here rather than from a file of its own:
 - **At runtime.** A few workloads take the whole Secret (`envFrom`, or a chart's
   `existingSecret`). Those reference the Secret object directly instead of being
   templated.
+
+It is not the only encrypted file in the repository - `velero-credentials`,
+`flux-system-secret` and the two telegram tokens are `*.sops.yaml` files of their
+own, because a single object that cannot be templated is easier to keep honest
+next to the thing that consumes it. It is, however, the only place an *application
+credential* should live, and the reason is worth remembering: `aiostreams` used to
+carry its own encrypted Secret alongside the same values here, and because that
+app's Kustomization never set `spec.decryption`, what reached the cluster was the
+literal ciphertext (`SECRET_KEY=ENC[AES256_GCM,...]`). It stayed harmless only
+because inline `env:` wins over `envFrom`. Two copies is one copy too many, and the
+copy nobody can see is the one that rots.
 
 Adding or rotating a value - note that the file argument comes first and the value
 is a JSON string:
@@ -56,6 +66,6 @@ kubectl get helmreleases -A -o json | grep -c cluster-secrets
 authentik, azure, code-server, comet, esphome, mediafusion, openposterdb, pihole and
 subtitles; eleven when the device-fleet control plane and the browser-desktop
 workspaces were removed, down to their session, signing and shared-secret keys; and
-three when Keycloak stopped brokering Microsoft), which is why the bundle holds 32
+three when Keycloak stopped brokering Microsoft), which is why the bundle holds 27
 keys. Anything still installed elsewhere that read one of those keys would have
 failed loudly on its next render; nothing did.

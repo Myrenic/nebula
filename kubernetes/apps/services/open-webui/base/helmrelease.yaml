@@ -26,6 +26,15 @@ spec:
               - sh
               - -c
               - cp -R -n /app/backend/data/. /tmp/app-data/
+            resources:
+              # A one-shot recursive copy of the ~250 MB of baked-in model
+              # caches; the limit is what `cp` needs to buffer a large file, not
+              # what it holds.
+              requests:
+                cpu: 10m
+                memory: 32Mi
+              limits:
+                memory: 256Mi
             securityContext:
               runAsNonRoot: true
               allowPrivilegeEscalation: false
@@ -206,6 +215,12 @@ spec:
             securityContext:
               runAsNonRoot: true
               allowPrivilegeEscalation: false
+              # No readOnlyRootFilesystem here, unlike glance/searxng/spottarr:
+              # the app is imported from /app at start (Python writes __pycache__
+              # beside the sources) and it re-copies its frontend bundle every
+              # time it starts, so a read-only root would only move the question.
+              # The paths it does need to write - HOME, STATIC_DIR, the secret
+              # key file - are already pointed into the volume above.
               capabilities:
                 drop: ["ALL"]
     defaultPodOptions:

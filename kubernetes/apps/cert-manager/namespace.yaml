@@ -6,3 +6,7 @@ metadata:
     kustomize.toolkit.fluxcd.io/prune: disabled
   labels:
     pod-security.kubernetes.io/enforce: baseline
+    # Pins the policy to the version the cluster runs (kubelet v1.37.0); otherwise
+    # the enforce version floats and a new restriction lands unannounced at the
+    # next Kubernetes upgrade.
+    pod-security.kubernetes.io/enforce-version: v1.37

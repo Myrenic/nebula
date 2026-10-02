@@ -14,6 +14,14 @@ spec:
     kind: GitRepository
     name: flux-system
     namespace: flux-system
+  # The chart's PVC is Longhorn-backed. Without the dependency a first install
+  # races the StorageClass: the StatefulSet stays Pending and the HelmRelease
+  # reports failed instead of waiting once storage is up. kube-prometheus-stack
+  # has the same gap (two Longhorn PVCs, no dependency) and is flagged rather
+  # than changed here.
+  dependsOn:
+    - name: longhorn
+      namespace: flux-system
   wait: true
   healthChecks:
     - apiVersion: helm.toolkit.fluxcd.io/v2

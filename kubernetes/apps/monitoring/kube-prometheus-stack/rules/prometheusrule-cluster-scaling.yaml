@@ -6,29 +6,29 @@ metadata:
     release: kube-prometheus-stack
 spec:
   groups:
-    - name: cluster-node-health
-      rules:
-        - alert: KubernetesNodeNotReady
-          expr: kube_node_status_condition{condition="Ready",status="true"} == 0
-          for: 10m
-          labels:
-            severity: critical
-          annotations:
-            summary: Kubernetes node is not Ready
-            description: Node {{ $labels.node }} has been NotReady for over 10 minutes.
-        - alert: KubernetesNodePressure
-          expr: max by (node, condition) (kube_node_status_condition{condition=~"MemoryPressure|DiskPressure|PIDPressure",status="true"} == 1)
-          for: 10m
-          labels:
-            severity: warning
-          annotations:
-            summary: Kubernetes node under pressure
-            description: Node {{ $labels.node }} is reporting {{ $labels.condition }} for over 10 minutes.
+    # This file used to re-implement KubernetesNodeNotReady and
+    # KubernetesNodePressure on top of kube_node_status_condition. The chart that
+    # this Prometheus is installed from already ships both as KubeNodeNotReady and
+    # KubeNodePressure, and its copies are the better ones: they exclude cordoned
+    # nodes (kube_node_spec_unschedulable == 0), so a planned drain does not alert,
+    # while the copies here fired on any node whose Ready condition was not True.
+    # What is left is only the scaling guidance the chart does not provide.
     - name: cluster-capacity-guidance
       rules:
         - alert: ClusterOverprovisioned
+          # The `unless` legs are Unknown handling, not decoration. A node whose
+          # Ready condition is Unknown is not counted as ready by the selector
+          # below, but its last CPU and memory samples are still in the sums, so
+          # without this guard an unreachable node looks like spare capacity and
+          # the alert says "scale down" at the moment the cluster is degrading.
+          # `unless` over an empty right-hand side leaves the left side untouched,
+          # which is what makes this correct when no node is Unknown.
           expr: |
-            count(kube_node_status_condition{condition="Ready",status="true"} == 1) > 1
+            (
+              count(kube_node_status_condition{condition="Ready",status="true"} == 1) > 1
+              unless
+              count(kube_node_status_condition{condition="Ready",status="unknown"} == 1) > 0
+            )
             and
             (
               1 - (
@@ -53,7 +53,11 @@ spec:
             description: Ready nodes are greater than one while cluster CPU and memory stay low for 6 hours. Consider scaling down.
         - alert: SingleNodeHighUtilization
           expr: |
-            count(kube_node_status_condition{condition="Ready",status="true"} == 1) == 1
+            (
+              count(kube_node_status_condition{condition="Ready",status="true"} == 1) == 1
+              unless
+              count(kube_node_status_condition{condition="Ready",status="unknown"} == 1) > 0
+            )
             and
             (
               (

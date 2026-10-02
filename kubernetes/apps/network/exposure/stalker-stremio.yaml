@@ -13,8 +13,10 @@ spec:
     - match: Host(`stalker.${SECRET_DOMAIN_0}`)
       kind: Rule
       middlewares:
+        # Unqualified on purpose: the middlewares live in this namespace, and
+        # every other route here relies on that. Only the service references
+        # carry a namespace, because those really are elsewhere.
         - name: lan-only
-          namespace: network
       services:
         - name: stalker-stremio
           namespace: services

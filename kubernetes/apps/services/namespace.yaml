@@ -5,6 +5,10 @@ metadata:
   annotations:
     kustomize.toolkit.fluxcd.io/prune: disabled
   labels:
-    # privileged on purpose: frigate mounts the iGPU render node and runs with
-    # privileged: true, as its own container documents.
-    pod-security.kubernetes.io/enforce: privileged
+    # baseline, and every app in here holds to it: each container declares a
+    # non-root securityContext with allowPrivilegeEscalation off and all
+    # capabilities dropped. frigate used to be the exception and now lives in
+    # its own privileged namespace (kubernetes/apps/frigate) so that its iGPU
+    # access does not exempt the other nine apps from this policy.
+    pod-security.kubernetes.io/enforce: baseline
+    pod-security.kubernetes.io/enforce-version: v1.37

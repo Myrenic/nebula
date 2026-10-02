@@ -1,9 +1,19 @@
-# Converges Longhorn volume replica counts to the number of Ready nodes.
+# Grows Longhorn volume replica counts when the cluster has room for them.
 #
 # Why this exists: Longhorn's per-volume numberOfReplicas is fixed at creation
-# time, so volumes created on a single-node cluster stay at 1 replica when a
-# second node appears, and volumes created on 3 nodes stay at 2 when the cluster
-# shrinks.
+# time, so volumes created while the cluster was effectively single-node stay at
+# 1 replica after a second node appears. This job raises those to 2.
+#
+# Grow-only, on purpose. The job used to write TARGET_REPLICAS=1 whenever fewer
+# than two nodes were Ready, so a node reboot, an Omni rolling upgrade or a
+# two-node outage decommissioned redundancy at the worst possible moment - and
+# every volume that was shrunk then had to be rebuilt when the node came back
+# (one such rebuild came back faulted; see docs/cluster.md). A node being down is
+# not a statement about how many replicas a volume should have. Shrinking a
+# volume is now a deliberate manual act:
+#
+#   kubectl -n storage patch volume <name> --type merge \
+#     -p '{"spec":{"numberOfReplicas":1}}'
 #
 # What this job does NOT do (it used to, and it was a bug): patch
 # settings.longhorn.io/default-replica-count. That value is owned by the
@@ -26,8 +36,9 @@ rules:
   - apiGroups: [""]
     resources: ["nodes"]
     verbs: ["list", "get"]
-  # Needed to follow a volume back to its PVC, so that the volumes which must
-  # stay at one replica (frigate-media) can be skipped.
+  # Needed to follow a volume back to its PVC, for both ways a volume can be
+  # excluded: by PVC name (frigate-media) and by the
+  # nebula.tuntelder.com/replica-count label.
   - apiGroups: [""]
     resources: ["persistentvolumeclaims"]
     verbs: ["list", "get"]
@@ -62,6 +73,14 @@ spec:
   failedJobsHistoryLimit: 3
   jobTemplate:
     spec:
+      # Sized to the schedule. A run takes seconds, so 240s is four minutes of
+      # margin away from the next tick (concurrencyPolicy: Forbid skips that tick
+      # if this one is still going), and one retry fits inside it. The failed Job
+      # this leaves behind is only visible to someone reading the namespace: the
+      # alert on a failed or stale CronJob lives in the monitoring layer
+      # (kubernetes/apps/monitoring rules), not here.
+      activeDeadlineSeconds: 240
+      backoffLimit: 1
       template:
         spec:
           serviceAccountName: longhorn-replica-adjuster
@@ -81,23 +100,52 @@ spec:
                 - /bin/sh
                 - -c
                 - |
-                  set -e
+                  set -eu
 
-                  # Count nodes with Ready=True condition
-                  READY_NODES=$(kubectl get nodes -o jsonpath='{range .items[*]}{range .status.conditions[?(@.type=="Ready")]}{.status}{"\n"}{end}{end}' | grep -c "True" || echo "0")
+                  # Count nodes whose Ready condition is True.
+                  #
+                  # `grep -c` prints 0 *and* exits non-zero when nothing matches,
+                  # so the old `... | grep -c True || echo 0` left READY_NODES
+                  # holding "0\n0" during a total outage - the `||` appended a
+                  # second line. The integer test below then failed with "Illegal
+                  # number", and since a test in an `if` condition does not stop a
+                  # `set -e` script, the job did not abort: it fell through to the
+                  # else branch and selected the shrink path, in exactly the case
+                  # the job exists for. Fetch the list separately (so a failed
+                  # kubectl cannot be mistaken for "no nodes Ready"), force the
+                  # count to one line, and refuse to act if it is not a number.
+                  if ! node_ready=$(kubectl get nodes -o jsonpath='{range .items[*]}{range .status.conditions[?(@.type=="Ready")]}{.status}{"\n"}{end}{end}'); then
+                    echo "ERROR: cannot list nodes, leaving every replica count alone" >&2
+                    exit 1
+                  fi
+                  READY_NODES=$(printf '%s\n' "${node_ready}" | grep -cx "True" || true)
+                  READY_NODES=$(printf '%s' "${READY_NODES}" | tr -d '[:space:]')
+                  case "${READY_NODES}" in
+                    ''|*[!0-9]*)
+                      echo "ERROR: Ready-node count '${READY_NODES}' is not a number" >&2
+                      exit 1
+                      ;;
+                  esac
                   echo "Ready nodes: ${READY_NODES}"
 
-                  # Determine target replica count
-                  if [ "${READY_NODES}" -ge 2 ]; then
-                    TARGET_REPLICAS=2
-                  else
-                    TARGET_REPLICAS=1
+                  # With fewer than two Ready nodes there is nothing to grow, and
+                  # nothing to shrink either - see the header. Exit successfully:
+                  # a single-node cluster is a state this job is expected to run
+                  # in, not an error.
+                  if [ "${READY_NODES}" -lt 2 ]; then
+                    echo "Fewer than 2 Ready nodes: leaving every replica count as it is."
+                    exit 0
                   fi
+                  TARGET_REPLICAS=2
                   echo "Target replica count: ${TARGET_REPLICAS}"
 
-                  # PVCs that deliberately stay at one replica. A second copy
-                  # only costs disk space here: this is bulk data that does not
-                  # need a spare.
+                  # Volumes that must stay at one replica. A second copy only
+                  # costs disk space here: this is bulk data that does not need a
+                  # spare. Two ways to say it:
+                  #   * by PVC name, for volumes that predate the label;
+                  #   * by the nebula.tuntelder.com/replica-count="1" label, which
+                  #     is how a new PVC opts out, matched through the PVC to the
+                  #     volume it is bound to.
                   SINGLE_REPLICA_PVCS="frigate-media"
                   EXCLUDED_VOLUMES=""
                   for pvc in ${SINGLE_REPLICA_PVCS}; do
@@ -106,32 +154,52 @@ spec:
                       EXCLUDED_VOLUMES="${EXCLUDED_VOLUMES} ${vn}"
                     done
                   done
+                  for vn in $(kubectl get pvc -A -l 'nebula.tuntelder.com/replica-count=1' \
+                      -o jsonpath='{range .items[*]}{.spec.volumeName}{" "}{end}'); do
+                    EXCLUDED_VOLUMES="${EXCLUDED_VOLUMES} ${vn}"
+                  done
 
                   echo "Staying at 1 replica:${EXCLUDED_VOLUMES}"
 
-                  # Converge EXISTING volumes to the target replica count, so
-                  # volumes created under a different node count do not keep
-                  # double-booking storage (2 replicas on 1 node) or stay
-                  # under-replicated after the cluster grows.
+                  # Converge EXISTING volumes upwards, so volumes created under a
+                  # different node count do not stay under-replicated after the
+                  # cluster grows.
                   #
                   # Note: numberOfReplicas is a number. A jsonpath filter such as
                   # [?(@.spec.numberOfReplicas!='2')] compares it to a string and
                   # fails with "incompatible types for comparison", which is how
                   # this step silently did nothing before. So read the values here
                   # and compare them in the shell.
+                  report=$(mktemp)
                   kubectl -n storage get volumes.longhorn.io \
-                    -o jsonpath='{range .items[*]}{.metadata.name}{" "}{.spec.numberOfReplicas}{"\n"}{end}' |
+                    -o jsonpath='{range .items[*]}{.metadata.name}{" "}{.spec.numberOfReplicas}{"\n"}{end}' \
+                    > "${report}"
+                  raised=0
                   while read -r volume current; do
+                    case "${current}" in
+                      ''|*[!0-9]*)
+                        echo "Skipping ${volume}: unreadable replica count '${current}'"
+                        continue
+                        ;;
+                    esac
                     want="${TARGET_REPLICAS}"
                     case " ${EXCLUDED_VOLUMES} " in
                       *" ${volume} "*) want=1 ;;
                     esac
-                    if [ "${current}" != "${want}" ]; then
+                    # Grow-only: never lower. A volume that is above the target
+                    # was raised deliberately, and lowering it here is what turned
+                    # a reboot into a rebuild.
+                    if [ "${current}" -lt "${want}" ]; then
                       echo "Volume ${volume}: ${current} -> ${want} replica('s)"
                       kubectl -n storage patch volume "${volume}" --type merge \
                         -p "{\"spec\":{\"numberOfReplicas\":${want}}}"
+                      raised=$((raised + 1))
+                    elif [ "${current}" -gt "${want}" ]; then
+                      echo "Volume ${volume}: ${current} replica('s), above target ${want} - left alone"
                     fi
-                  done
+                  done < "${report}"
+                  rm -f "${report}"
+                  echo "Raised ${raised} volume(s)."
               resources:
                 requests:
                   cpu: 10m

@@ -1,5 +1,8 @@
 creation_rules:
-  - encrypted_regex: '^(data|stringData)$'
+  # binaryData is base64, which is an encoding, not encryption: without it here a
+  # Secret that carries a file (a kubeconfig, a keystore) would be committed in
+  # the clear under an encrypted filename.
+  - encrypted_regex: '^(data|stringData|binaryData)$'
     path_regex: 'kubernetes/.*\.sops\.ya?ml$'
     age: >-
       age10qpu76yk6rvyaunmsadkej3l0pwuk4mn4uhxnem4cyl9zjrucgmsndh72v

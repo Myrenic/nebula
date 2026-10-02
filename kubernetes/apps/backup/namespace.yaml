@@ -10,3 +10,9 @@ metadata:
     # backup layer that cannot read the volume it is meant to protect is worse
     # than none, so this namespace is the one place where privileged is honest.
     pod-security.kubernetes.io/enforce: privileged
+    # Pin the Pod Security Standards ruleset to the kubelet minor this cluster
+    # runs (v1.37). The PSS rules are versioned and the label defaults to
+    # "latest", so without this a cluster upgrade would silently change what
+    # "privileged" is measured against; pinned, the enforced rules stay the ones
+    # this namespace was validated against.
+    pod-security.kubernetes.io/enforce-version: v1.37

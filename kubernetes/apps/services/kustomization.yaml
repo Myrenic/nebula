@@ -4,7 +4,6 @@ kind: Kustomization
 resources:
   - ./namespace.yaml
   - ./aiostreams
-  - ./frigate
   - ./glance
   # These two deploy from their own repositories; only the GitRepository and
   # the Flux Kustomization live here.

@@ -13,7 +13,10 @@ spec:
         - name: lan-only
       services:
         - name: frigate
-          namespace: services
+          # frigate has a namespace of its own since 2026-10-02: it is the one
+          # workload here that needs a privileged container (Intel iGPU), and
+          # keeping it in `services` forced that policy on nine apps that do not.
+          namespace: frigate
           port: 5000
   tls:
     secretName: domain-0-prod-tls

@@ -3,6 +3,7 @@
 #   cilium : 1.20.2
 #   CRD's  : github.com/cilium/cilium v1.20.2, pkg/k8s/apis/cilium.io/client/crds/v2
 #   values: omni/cilium/values.yaml
+#   helm   : v3.21.4+g813176c
 #
 # First the CRDs, then the chart. The Cilium Helm chart contains no
 # CRDs (helm show crds returns 0 lines). Without these files
@@ -20280,7 +20281,7 @@ spec:
       k8s-app: cilium
   updateStrategy:
     rollingUpdate:
-      maxUnavailable: 2
+      maxUnavailable: 1
     type: RollingUpdate
   template:
     metadata:

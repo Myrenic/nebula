@@ -4,7 +4,14 @@ kind: Kustomization
 resources:
   - ./gotk-sync.yaml
 # flux-system-secret.sops.yaml is intentionally NOT applied: kubectl/kustomize
-# cannot decrypt SOPS at bootstrap time, and the repo is public (anonymous
-# HTTPS clone). If the repo ever goes private, switch the GitRepository URL to
-# ssh://git@github.com/myrenic/nebula and apply this secret manually after
-# decrypting it with the age key.
+# cannot decrypt SOPS at bootstrap time, and Flux needs this credential before
+# it can fetch anything - the repository is private on the forge, which is what
+# makes the credential necessary in the first place. Apply it by hand, once per
+# cluster, after the age key exists:
+#
+#   sops -d kubernetes/apps/flux-system/flux-instance/flux-system-secret.sops.yaml \
+#     | kubectl apply -f -
+#
+# It is kept in git, encrypted, so the rebuild does not depend on a token that
+# only exists in someone's password manager - but it is the one secret here
+# that Flux cannot deliver itself.
