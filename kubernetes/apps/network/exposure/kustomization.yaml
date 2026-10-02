@@ -9,7 +9,6 @@ resources:
   - ./aiostreams.yaml
   - ./certificate.yaml
   - ./flux-operator.yaml
-  - ./forgejo.yaml
   - ./frigate.yaml
   - ./glance.yaml
   - ./grafana.yaml

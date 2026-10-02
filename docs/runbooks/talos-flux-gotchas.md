@@ -63,7 +63,7 @@ Two traps that do not announce themselves:
   schedule fires, Velero skips its volume and still reports `Completed`. The list
   lives in `volumeInfo`, which is only in the object store, so it takes
   `velero backup describe <name> --details` to see it. This has already happened
-  once (Forgejo mid-rollout), and it is the reason a `Completed` backup is not on
+  once (an app mid-rollout), and it is the reason a `Completed` backup is not on
   its own evidence that the data is in it.
 
 The alert rules for this are in

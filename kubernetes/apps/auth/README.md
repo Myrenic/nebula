@@ -40,7 +40,7 @@ in the realm the applications authenticate against.
 | Realm | Who is in it | What it is for |
 | --- | --- | --- |
 | `master` | the bootstrap admin (`KEYCLOAK_ADMIN_USERNAME`) and any administrator you add there deliberately | the admin console, `https://keycloak.${SECRET_DOMAIN_0}/admin/master/console/` |
-| `nebula` | the people who sign in to this cluster's apps, and no `realm-management` role for any of them | OIDC for oauth2-proxy and Forgejo; self-service at `https://keycloak.${SECRET_DOMAIN_0}/realms/nebula/account` |
+| `nebula` | the people who sign in to this cluster's apps, and no `realm-management` role for any of them | OIDC for oauth2-proxy; self-service at `https://keycloak.${SECRET_DOMAIN_0}/realms/nebula/account` |
 
 ## The realm is not in git
 
@@ -51,10 +51,9 @@ clients and its users exist only in Keycloak's database. What is hand-made:
 | --- | --- |
 | The realm `nebula` | settings only - `sslRequired: external`, `loginTheme: nebula`, the default token lifetimes, no self-registration - so a rebuild is one API call |
 | The client `webui` (confidential) | the secret is `client-secret` in the `keycloak-webui-oauth` Secret |
-| The client `forgejo` (confidential) | the secret is `FORGEJO_OAUTH_CLIENT_SECRET` in `cluster-secrets`, so git holds it, encrypted |
 | The users | created in the console; a realm created this way starts empty |
 
-That call, with the two client secrets filled in from the sources above:
+That call, with the client secret filled in from the source above:
 
 ```bash
 TOKEN=$(curl -sS -d "client_id=admin-cli&username=$KEYCLOAK_ADMIN_USERNAME&password=$KEYCLOAK_ADMIN_PASSWORD&grant_type=password" \
@@ -73,12 +72,6 @@ curl -sS -X POST -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application
       "secret": "<client-secret from the keycloak-webui-oauth Secret>",
       "redirectUris": ["https://auth.${SECRET_DOMAIN_0}/oauth2/callback"],
       "webOrigins": ["https://auth.${SECRET_DOMAIN_0}"]
-    },
-    {
-      "clientId": "forgejo",
-      "secret": "${FORGEJO_OAUTH_CLIENT_SECRET}",
-      "redirectUris": ["https://code.${SECRET_DOMAIN_0}/user/oauth2/Keycloak/callback"],
-      "webOrigins": ["https://code.${SECRET_DOMAIN_0}"]
     }
   ]
 }
@@ -86,12 +79,12 @@ EOF
 ```
 
 A client that is given a secret is confidential (`publicClient: false`), with the
-authorization-code flow on and direct access grants off - which is what both
-applications need, since each authenticates with its own secret and never handles a
-user's password. The `redirectUris` have to match `redirect-url` in
-`oauth2-proxy/base/helmrelease.yaml` and the callback in
-`forgejo/base/helmrelease.yaml` character for character: a mismatch is answered on
-the login page with `Invalid parameter: redirect_uri`, not with a log line.
+authorization-code flow on and direct access grants off - which is what the
+application needs, since it authenticates with its own secret and never handles a
+user's password. The `redirectUri` has to match `redirect-url` in
+`oauth2-proxy/base/helmrelease.yaml` character for character: a mismatch is
+answered on the login page with `Invalid parameter: redirect_uri`, not with a log
+line.
 
 To remove a realm, `Realm settings` -> `Delete realm` in the console, or:
 

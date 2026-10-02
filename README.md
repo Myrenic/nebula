@@ -16,11 +16,11 @@ later.
 | --- | --- | --- |
 | CNI | Cilium 1.20, installed once by the Omni template, manages itself after | `omni/cilium/` |
 | Ingress | Traefik v3 (2 replicas), the only LoadBalancer service, `10.0.50.4` | `kubernetes/apps/network/` |
-| Identity | oauth2-proxy in front of Keycloak (realm `nebula`), OIDC; the forge signs in against the same realm directly; Keycloak's own `master` realm is for administration only | `kubernetes/apps/auth/` |
+| Identity | oauth2-proxy in front of Keycloak (realm `nebula`), OIDC; Keycloak's own `master` realm is for administration only | `kubernetes/apps/auth/` |
 | Certificates | cert-manager with a Cloudflare DNS-01 ClusterIssuer, wildcard cert | `kubernetes/apps/cert-manager/` |
 | Storage | Longhorn 1.11, one replica by default, `longhorn-2-replicas` on request | `kubernetes/apps/storage/` |
 | Observability | kube-prometheus-stack, Loki, Promtail, blackbox probes per discovered host, Telegram alerts | `kubernetes/apps/monitoring/` |
-| Other apps | aiostreams, forgejo, frigate (+ reolinkproxy), glance, open-webui, searxng, spottarr, stalker-stremio, uptime-kuma | `kubernetes/apps/services/` |
+| Other apps | aiostreams, frigate (+ reolinkproxy), glance, open-webui, searxng, spottarr, stalker-stremio, uptime-kuma | `kubernetes/apps/services/` |
 | Outside the cluster | homeassistant - reachable through a Service + Endpoints pair that points at another machine | `kubernetes/apps/network/exposure/` |
 
 Two applications keep their code and manifests in their own repositories, because
@@ -145,14 +145,12 @@ Notes:
   only as an encrypted backup of the old deploy key and is not part of any
   kustomization.
 - Three things are created by hand and are in no manifest: the Keycloak realm
-  `nebula` and its two clients, the `keycloak-webui-oauth` Secret that holds the
+  `nebula` and its client, the `keycloak-webui-oauth` Secret that holds the
   oauth2-proxy client's secret and its cookie secret, and the age key above. The
-  realm is one API call - realm, both clients, both redirect URIs and both secrets,
-  written out in `kubernetes/apps/auth/README.md` together with the order to move
-  between realms in - and the forge's client secret is the one part of it that is
-  in git, encrypted, as `FORGEJO_OAUTH_CLIENT_SECRET`, because its value also has
-  to be in the HelmRelease. A rebuild from git alone therefore needs those three
-  steps and a user account, which is the honest state of things.
+  realm is one API call - realm, client, redirect URI and secret - written out in
+  `kubernetes/apps/auth/README.md` together with the order to move between realms
+  in. A rebuild from git alone therefore needs those three steps and a user
+  account, which is the honest state of things.
 - One credential lives outside git *and* outside Keycloak: the read-only Proxmox
   token the dashboard's `proxmox` widget reads. On the Proxmox host (`pve`,
   `10.0.50.11`) there is a group `api-ro` (role `PVEAuditor` at `/`), a user
@@ -275,7 +273,6 @@ health after a push, so:
 ```bash
 flux reconcile kustomization flux-system --with-source
 flux get kustomizations --status-selector ready=false
-kubectl -n services rollout status deploy/forgejo --timeout=180s
 ```
 
 ## Operating notes
@@ -319,18 +316,13 @@ kubectl -n services rollout status deploy/forgejo --timeout=180s
   `domain-0-prod` (Cloudflare DNS-01) and is the only LoadBalancer service
   (`10.0.50.4`, MetalLB L2 pool `10.0.50.4-10.0.50.6`). oauth2-proxy in front of
   Keycloak is the authentication path for everything behind `oauth2-proxy-auth`;
-  the routes marked public (status page, the forge) answer with their own
-  accounts. Identity arrives as oauth2-proxy's headers, never from the client.
-- **The forge is themed from git.** `kubernetes/apps/services/forgejo/base/theme/`
-  holds a stylesheet, Forgejo's `templates/custom/header.tmpl` hook, a replacement
-  `templates/home.tmpl` and three icons. The ConfigMap is mounted over the matching
-  paths under `custom/` in the `/data` volume - `custom/public/assets` for what a
-  browser fetches, `custom/templates` for what Forgejo renders. The colours are
-  Forgejo's own variables (`--color-primary*`, `--color-nav-bg`) redefined for both
-  halves of `forgejo-auto`, so no page markup had to be copied to recolour the
-  application. Those mounts are `subPath`, which the kubelet does not refresh under
-  a running pod: after a theme change,
-  `kubectl -n services rollout restart deploy/forgejo`.
+  the routes marked public answer with their own accounts or with none. Identity
+  arrives as oauth2-proxy's headers, never from the client.
+- **The forge is not in the cluster.** It runs as an LXC on the Proxmox host
+  (`pve`, `10.0.50.11`), reached at `code.${SECRET_DOMAIN_0}`; its theme and notes
+  live in the `mtuntelder/forge` repository on it. Nothing here deploys it - the
+  in-cluster Forgejo it replaced could not host the repository the cluster
+  converges from, which is why it went.
 - **The sign-in pages are themed from git as well.**
   `kubernetes/apps/auth/keycloak/base/theme/` holds a `theme.properties` and one
   stylesheet, shipped as the `keycloak-theme` ConfigMap and mounted file by file
@@ -394,34 +386,31 @@ EOF
 One app, into a scratch namespace (this is the command the drill below runs):
 
 ```bash
-kubectl create namespace forgejo-restore
+kubectl create namespace open-webui-restore
 
 kubectl -n velero create -f - <<'EOF'
 apiVersion: velero.io/v1
 kind: Restore
 metadata:
-  name: forgejo-restore
+  name: open-webui-restore
 spec:
   backupName: apps-daily-20260927021301
   includedNamespaces: [services]
   orLabelSelectors:
     - matchLabels:
-        app.kubernetes.io/name: forgejo
-    - matchLabels:
-        app.kubernetes.io/name: forgejo-postgres
+        app.kubernetes.io/name: open-webui
   namespaceMapping:
-    services: forgejo-restore
+    services: open-webui-restore
 EOF
 
 kubectl -n velero get restores.velero.io
 kubectl -n velero get podvolumerestores.velero.io   # one per volume, this is the data
 ```
 
-Forgejo is the app this works cleanly for, and that is deliberate: its PVC is the
-one it was missing, because the chart creates it and left it unlabelled, so the
-forge *and* its repositories came back from a selector that would otherwise have
-brought back Forgejo without them. `persistence.labels` in the HelmRelease fixes
-that. Keycloak needs no selector - it is the whole of namespace `auth`, hand-made
+The label selector is the part to get right: a restore carries a volume only when
+the PVC's labels match, and the Helm charts here label each PVC with its app's
+`app.kubernetes.io/name`, so a selector on that name brings the app back with its
+data. Keycloak needs no selector - it is the whole of namespace `auth`, hand-made
 secret included - so `includedNamespaces: [auth]` is the complete form.
 
 `existingResourcePolicy` defaults to keeping whatever is already there. Restoring
@@ -437,9 +426,9 @@ see it:
 velero backup describe <name> --details     # look for SKIPPED in the volume list
 ```
 
-It has bitten once: `gitea-shared-storage` was skipped because Forgejo was
-mid-rollout when the backup ran, and the backup still reported `Completed`. Treat a
-cleanup/rollout that lands across 02:13 as worth re-running the backup for.
+It has bitten once: a volume was skipped because its pod was mid-rollout when the
+backup ran, and the backup still reported `Completed`. Treat a cleanup/rollout
+that lands across 02:13 as worth re-running the backup for.
 
 ### Failure drill: 2 of 3 nodes unavailable
 
