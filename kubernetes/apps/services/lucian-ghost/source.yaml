@@ -22,5 +22,5 @@ metadata:
 spec:
   interval: 1m
   ref:
-    commit: c07bd0f5445101ef904cec47a9a314c8ad79fcb8
+    commit: b77c82c9e95d43ae8757a34e54b12ae37e74031f
   url: https://github.com/Myrenic/lucian-ghost
